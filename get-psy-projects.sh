@@ -203,13 +203,6 @@ function config() {
 	__old_IFS="${IFS}"
 	__custom_IFS=$'\n\t'
 	IFS="${__custom_IFS}"
-
-	if ! declare -p __time_start &>/dev/null; then
-		IFS=. read -r esec nsec <<<"${EPOCHREALTIME}"
-		__time_start="$(
-			printf '%(%F:%T)T.%06.0f' "${esec}" "${nsec}" 2>/dev/null || return 0
-		)"
-	fi
 }
 
 function utilities() {
@@ -306,6 +299,95 @@ function utilities() {
 		fi
 	}
 
+	interactive_question() {
+		declare -i suggestion="${suggestion:-0}"
+
+		declare \
+			title="${title:-}" \
+			question="${question:-}" \
+			default="${default:-}" \
+			prompt="${prompt:-}" \
+			reply="${reply:-}" \
+			suggestion="${suggestion:-}" \
+			is_dry_run_prefix="${is_dry_run_prefix:-}"
+
+		title="${1:-}"
+		question="${2:-}"
+		default="${3:-}"
+
+		__help() {
+			cat <<-__eof_help
+				usage:
+				  interactive_question <args>
+				  ┌─────────────┬────────────┬────────────┐
+				  │  Parameter  │    Name    │  Default   │
+				  ├─────────────┼────────────┼────────────┤
+				  │      1      │  title     │            │
+				  │      2      │  question  │            │
+				  │      3      │  default   │            │
+				  └─────────────┴────────────┴────────────┘
+
+				example:
+				  interactive_question "Interactive Question:" "do you want to continue?" "Y"
+			__eof_help
+		}
+
+		((${force:-0})) && return 0
+
+		if ((${dry_run:-0} == 0)); then
+			is_dry_run_prefix=""
+		else
+			is_dry_run_prefix="[Dry-Run]-"
+		fi
+
+		[[ -z "${title:-}" ]] && {
+			__help
+
+			exit 0
+		}
+
+		if [[ "${default}" = "Y" ]]; then
+			prompt="Y/n"
+			default="Y"
+		elif [[ "${default}" = "N" ]]; then
+			prompt="y/N"
+			default="N"
+		else
+			prompt="y/n"
+			default=""
+		fi
+		while true; do
+			printf "\n\e[2;95m%s\e[0m\n" \
+				"${is_dry_run_prefix}${title}"
+
+			printf "\e[94m%s\e[0m  \e[1;93m[ %s ]\e[0m\n" \
+				"    ${question}" "${prompt}"
+
+			((suggestion)) && {
+				printf "\n\e[104;97m     %s        \e[0m\n" "Please answer Yes or No."
+			} || printf ""
+
+			read -r reply </dev/tty
+
+			if [[ -z "${reply}" ]]; then
+				reply="${default}"
+			fi
+
+			case "${reply}" in
+			Y* | y*) printf "\n" && return 0 ;;
+			N* | n*) printf "\n" && return 1 ;;
+			*)
+				printf "\e[10A"
+				suggestion=1
+				;;
+			esac
+		done
+
+		{ # cleaning
+			unset -f __help
+		}
+	}
+
 	gh_get_archive_tarball() {
 		local _token="${1}"
 		local _user="${2}"
@@ -399,9 +481,9 @@ function utilities() {
 			)"
 
 			if (("${#check_root_password_in_shadow_file}" > 2)); then
-				return 1
-			else
 				return 0
+			else
+				return 1
 			fi
 		else
 			return 1
@@ -414,12 +496,13 @@ function utilities() {
 
 		_root_password="${1:-}"
 
-		[[ -z "${_root_password}" ]] && {
-			printf "\e[91m%s\e[0m\n" "root_password variable is empty."
-			exit 1
-		} || printf ""
+		# [[ -z "${_root_password}" ]] && {
+		# 	printf "\e[91m%s\e[0m\n" "root_password variable is empty."
+		# 	exit 1
+		# } || printf ""
 
-		if printf "%s\n" "${_root_password}" | sudo -S cat /etc/shadow &>/dev/null; then
+		if printf "%s\n" "${_root_password}" |
+			sudo -S cat /etc/shadow &>/dev/null; then
 			return 0
 		else
 			return 1
@@ -490,6 +573,38 @@ function utilities() {
 		export root_password="${__input_line_content}"
 	}
 
+	get_project_from_stdin() {
+		declare \
+			__input_line_content="${__input_line_content:-}"
+
+		printf "\n\e[93m%s\e[0m\n" \
+			"Please enter the project you want to download:"
+
+		printf "\n\t\e[92m%-10s : \e[0m" \
+			"Project [user/repo]"
+
+		while IFS= read -r -s -n1 char; do
+			[[ -z "${char}" ]] && {
+				printf '\n'
+				break
+			}
+
+			if [[ "${char}" == $'\x7f' ]]; then # backspace was pressed
+				((${#__input_line_content} > 0)) && {
+					__input_line_content="${__input_line_content%?}"
+
+					printf '\b \b'
+				}
+			else
+				__input_line_content+="${char}"
+
+				printf "%s" "${char}"
+			fi
+		done
+
+		export set_project="${__input_line_content}"
+	}
+
 	show_help() {
 		cat <<-get_psy_projects
 
@@ -500,15 +615,17 @@ function utilities() {
 
 			Options:
 			  -h, --help                     Display this help information.
-			  -d, --directory <value>        Set path directory.
+			  -a, --all                      Get all Psy-Projects.
 			  -g, --git                      Clone repos.
+			  -d, --directory <value>        Set path download directory [default: cwd].
 			  -r, --root-password <value>    Set Root Password.
 			  -t, --github-token <value>     Set Token Github.
+			  -p, --project <value>          Set download Github Project [user/repo].
 
 			Examples:
-			  ${name_main_script} --token-github "ghp_do1JFasaf2...3c34tvc45P7Wk" --root-password "password" --directory "/home/psy"
-			  ${name_main_script} --directory "${PWD}/projects"
-			  ${name_main_script} --directory "${PWD}/projects" --git
+			  ${name_main_script} --directory "/home/psy" --root-password "password" --github-token "ghp_do1...XWk"
+			  ${name_main_script} --git --all --directory "\${PWD}/installations"
+			  ${name_main_script} --project "psy-org/psy-project"
 
 		get_psy_projects
 
@@ -747,7 +864,7 @@ function utilities() {
 		declare \
 			select_repo="${select_repo:-}"
 
-		for select_repo in "${_iarr_psy_projects_list[@]}"; do
+		for select_repo in "${iarr_psy_projects[@]}"; do
 			declare \
 				path_repo_directory="${path_repo_directory:-}" \
 				url_github_repo="${url_github_repo:-}"
@@ -776,6 +893,8 @@ function utilities() {
 			if [[ -f "${path_repo_directory}/${select_repo#*/}.sh" ]]; then
 				pushd "${path_repo_directory}" &>/dev/null
 
+				chmod +x "${path_repo_directory}/${select_repo#*/}.sh"
+
 				PSY_GITHUB_TOKEN="${psy_github_token}" \
 					bash "${path_repo_directory}/${select_repo#*/}.sh" --generate-dotenv
 
@@ -795,13 +914,11 @@ function utilities() {
 		declare \
 			select_repo="${select_repo:-}"
 
-		for select_repo in "${_iarr_psy_projects_list[@]}"; do
+		for select_repo in "${iarr_psy_projects[@]}"; do
 			declare \
-				path_repo_directory="${path_repo_directory:-}" \
-				url_github_repo="${url_github_repo:-}"
+				path_repo_directory="${path_repo_directory:-}"
 
 			path_repo_directory="${path_psy_projects_directory}/${select_repo#*/}"
-			url_github_repo="https://${psy_github_token}@github.com/${select_repo}.git"
 
 			{
 				printf "\n\e[92m  %s ! \e[93m\"%s\"\e[0m\n" \
@@ -816,6 +933,8 @@ function utilities() {
 			printf "\e[2;91m"
 			printf "\n"
 
+			echo hiooo
+
 			gh_get_archive_tarball \
 				"${psy_github_token}" \
 				"${select_repo%/*}" \
@@ -826,6 +945,8 @@ function utilities() {
 
 			if [[ -f "${path_repo_directory}/${select_repo#*/}.sh" ]]; then
 				pushd "${path_repo_directory}" &>/dev/null
+
+				chmod +x "${path_repo_directory}/${select_repo#*/}.sh"
 
 				PSY_GITHUB_TOKEN="${psy_github_token}" \
 					bash "${path_repo_directory}/${select_repo#*/}.sh" --generate-dotenv
@@ -840,7 +961,6 @@ function utilities() {
 
 			printf "\n\n"
 		done
-
 	}
 
 	:
@@ -851,14 +971,17 @@ function utilities() {
 
 function variables() {
 	_set_menu_option \
+		"-a | --all" \
 		"-g | --git"
 
 	_set_menu_option_value \
 		"-t | --github-token @ set_github_token" \
 		"-r | --root-password @ set_root_password" \
-		"-d | --directory @ set_path_directory"
+		"-d | --directory @ set_path_directory" \
+		"-p | --project @ set_project"
 
 	declare -ig \
+		all="${all:-0}" \
 		git="${git:-0}" \
 		help="${help:-0}"
 
@@ -868,10 +991,11 @@ function variables() {
 		name_main_script="${name_main_script:-}" \
 		path_psy_projects_directory="${path_psy_projects_directory:-}" \
 		psy_github_token="${psy_github_token:-}" \
-		root_password="${root_password:-}"
+		root_password="${root_password:-}" \
+		set_project="${set_project:-}"
 
 	declare -ag \
-		_iarr_psy_projects_list
+		iarr_psy_projects
 
 }
 
@@ -906,18 +1030,7 @@ function setting_variables() {
 	}
 
 	set_root_password() {
-		if check_sudo_require_password; then
-			root_password="csnzlatino"
-
-			printf "\e[31m%s\n\e[0m" \
-				"Set password for root user"
-
-			printf "%s\n%s\n" "${root_password}" "${root_password}" | sudo passwd &>/dev/null
-
-			if ! validate_root_password "${root_password}"; then
-				get_root_password_from_stdin
-			fi
-		else
+		if ! check_sudo_require_password; then
 			get_root_password_from_stdin
 		fi
 
@@ -932,8 +1045,8 @@ function setting_variables() {
 		fi
 	}
 
-	set_iarr_psy_projects_list() {
-		_iarr_psy_projects_list=(
+	set_iarr_psy_projects() {
+		iarr_psy_projects=(
 			"psy-projects-bash/bash-core-library"
 			"psy-projects-bash/psy-bash-tools"
 			"psy-projects-bash/psy-dev-utilities"
@@ -949,7 +1062,7 @@ function setting_variables() {
 	set_name_main_script
 	set_path_psy_projects_directory
 	# set_root_password
-	set_iarr_psy_projects_list
+	# set_iarr_psy_projects
 }
 
 function get_psy_projects() {
@@ -957,7 +1070,10 @@ function get_psy_projects() {
 		menu_options_only "${@}"
 	fi
 
-	{ # check option-value --directory
+	printf "\n\e[91m%s ........................ \e[93m%s\e[0m\n\n" \
+		"[ starting ]" "\"${name_main_script^}\""
+
+	{ # check option-value -d | --directory
 		if [[ -n "${set_path_directory:-}" ]]; then
 			if ! (check_directory_exists_or_mkdir "${set_path_directory}" &>/dev/null || return 1); then
 				check_directory_exists_or_mkdir "${set_path_directory}"
@@ -968,29 +1084,45 @@ function get_psy_projects() {
 		fi
 	}
 
-	{ # check option-value --root-password
+	{ # check option-value -r | --root-password
 		if [[ -n "${set_root_password:-}" ]]; then
 			root_password="${set_root_password}"
+
+			set_root_password
 		else
 			set_root_password
 		fi
 	}
 
-	{ # check option-value --github-token
+	{ # check option-value -t | --github-token
 		if [[ -n "${set_github_token:-}" ]]; then
 			psy_github_token="${set_github_token}"
 		fi
 	}
 
+	{ # check option-value -p | --project
+		if [[ -n "${set_project:-}" ]]; then
+			iarr_psy_projects=("${set_project}")
+		fi
+	}
+
 	check_github_token
 
-	printf "\n\e[91m%s ............ \e[93m%s\e[0m\n\n" \
-		"[ starting ]" "\"Get-PSY-Projects.sh\""
+	printf "\n\e[92m%s \e[96m\"%s\"\e[0m\n" \
+		"Psy-Projects-Directory:" "${path_psy_projects_directory}"
 
-	printf "\e[92m%s \e[96m\"%s\"\e[0m\n" \
-		"PSY Projects Directory:" "${path_psy_projects_directory}"
+	if [[ -z "${set_project}" ]] && ((all == 0)); then
+		if interactive_question "Interactive Question:" \
+			"Do you want to download all the projects?" \
+			"Y"; then
+			set_iarr_psy_projects
+		else
+			get_project_from_stdin
 
-	printf "\n"
+			[[ -n "${set_project}" ]] &&
+				iarr_psy_projects=("${set_project}")
+		fi
+	fi
 
 	if ((git)); then
 		git_clone_projects
@@ -998,7 +1130,8 @@ function get_psy_projects() {
 		download_projects
 	fi
 
-	printf "%s\n" "${root_password}" | sudo -S ls -hasl /usr/local/bin | grep '\->'
+	printf "%s\n" "${root_password}" |
+		sudo -S ls -hasl /usr/local/bin | grep '\->'
 }
 
 function init() {
