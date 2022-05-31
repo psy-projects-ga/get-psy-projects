@@ -475,7 +475,7 @@ function utilities() {
 		declare \
 			check_root_password_in_shadow_file="${check_root_password_in_shadow_file:-}"
 
-		if printf "" | sudo -S cat /etc/shadow &>/dev/null; then
+		if printf "" | sudo -S cat /etc/shadow; then
 			check_root_password_in_shadow_file="$(
 				sudo cat /etc/shadow | grep "root" | awk 'BEGIN { FS = ":" } { print $2 }'
 			)"
@@ -1031,7 +1031,9 @@ function setting_variables() {
 
 	set_root_password() {
 		if ! check_sudo_require_password; then
-			get_root_password_from_stdin
+			if ! validate_root_password "${root_password}"; then
+				get_root_password_from_stdin
+			fi
 		fi
 
 		if validate_root_password "${root_password}"; then
