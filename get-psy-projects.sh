@@ -475,7 +475,7 @@ function utilities() {
 		declare \
 			check_root_password_in_shadow_file="${check_root_password_in_shadow_file:-}"
 
-		if printf "" | sudo -S cat /etc/shadow; then
+		if printf "" | sudo -S cat /etc/shadow &>/dev/null; then
 			check_root_password_in_shadow_file="$(
 				sudo cat /etc/shadow | grep "root" | awk 'BEGIN { FS = ":" } { print $2 }'
 			)"
