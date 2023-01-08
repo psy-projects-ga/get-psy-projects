@@ -1,2 +1,2 @@
-# get-psy-projects
-get-psy-projects
+# psy-get-projects
+psy-get-projects
