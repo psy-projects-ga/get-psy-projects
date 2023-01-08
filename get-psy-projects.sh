@@ -4,7 +4,6 @@ function get_psy_projects() {
   { #helpers
     _help() {
       cat <<-EOF
-
 				$(printf "\e[1m%s\e[0m" "Get-psy-projects")
 
 				$(printf "\e[1;4m%s\e[0m" "Usage:")
@@ -15,21 +14,27 @@ function get_psy_projects() {
 				  -a, --all              <boolean?>      Enable download All projects.
 				  -d, --directory        <string?>       Set Directory path value. (Default: "~/installations")
 				  -g, --git              <boolean?>      Enable get Git repository instead of Tarball.
+				  -i, --install          <boolean?>      Enable Install project in Path.
 				  -l, --list             <boolean?>      Enable List projects.
 				  -p, --project          <string?>       Set Project value.
 				  -r, --root-password    <string?>       Set Root-Password value.
 				  -t, --token            string?>        Set Github Token value.
 
 				$(printf "\e[1;4m%s\e[0m" "Examples:")
-				  get-psy-projects -agt "ghp_123..." -r "R00tP@ssw0rd" -d "~/installations"
+				  get-psy-projects -p "bash-library" -d "~/installations" t "ghp_123..."
 
 				  get-psy-projects \ 
-				    --owner "psy" \ 
-				    --repo "bash-library" \ 
-				    --token "ghp_123..." \ 
-				    --output "./lib"
+				    --project "bash-library" \ 
+				    --directory "~/installations" \ 
+				    --token "ghp_123..."
+
+				  get-psy-projects --all --git --install
 
 			EOF
+
+      # set -- "${__}"
+      # set -- "|" "${@//$'\n'/$'\n'"| "}" "|"
+      # echo "${@//$'\n'/"   | "$'\n'}"
 
       exit 0
     }
@@ -37,11 +42,12 @@ function get_psy_projects() {
     config_parse_args() {
       ((${#})) || _help
 
-      while getopts ":-:had:glp:r:t:" opt; do
+      while getopts ":-:had:gilp:r:t:" opt; do
         case "${opt}" in
         h) _help ;;
         a) all="1" ;;
         g) git="1" ;;
+        i) install="1" ;;
         l) list="1" ;;
         d) directory="${OPTARG}" ;;
         p) project="${OPTARG}" ;;
@@ -52,6 +58,7 @@ function get_psy_projects() {
           help) _help ;;
           all) all="1" ;;
           git) git="1" ;;
+          install) install="1" ;;
           list) list="1" ;;
           directory) directory="${!OPTIND:?"Option \"--${OPTARG}\" requires an argument."}" && ((OPTIND++)) ;;
           project) project="${!OPTIND:?"Option \"--${OPTARG}\" requires an argument."}" && ((OPTIND++)) ;;
@@ -67,12 +74,15 @@ function get_psy_projects() {
       done
       shift "$((OPTIND - 1))"
 
-      ((${#})) && : "${*}" && throw_error "${_:+$'\n'}    Invalid arguments: ${_:+$'\n'}      \"${_// /\"$'\n      \"'}"
+      ((${#})) &&
+        : "${*}" &&
+        throw_error "${_:+$'\n'}    Invalid arguments: ${_:+$'\n'}      \"${_// /\"$'\n      \"'}\""
     }
 
     throw_error() {
-      : "${BASH_SOURCE[-1]}"
-      printf "\n\e[2;31m❌[${_##*/}] ERROR: %s\e[0m\n\n" "${1:-}"
+      printf "\n\e[2;31m%s %s\e[0m\n\n" \
+        "❌[${BASH_SOURCE[-1]##*/}] ERROR:" "${1:-}"
+
       exit "${2:-1}"
     }
   }
@@ -547,6 +557,7 @@ function get_psy_projects() {
     declare -i \
       all="${all:+0}" \
       git="${git:+0}" \
+      install="${install:+0}" \
       list="${list:+0}"
 
     declare \
@@ -563,7 +574,8 @@ function get_psy_projects() {
 
     { # options
       [[ -n "${directory}" ]] || directory="${HOME}/installations"
-      [[ -z "${project}" ]] && printf "\e[91m%s\e[0m\n" "Option \"--project\" is required." && exit 1
+
+      ! ((list)) && ! ((all)) && [[ -z "${project}" ]] && throw_error "Option \"--project\" is required."
 
       { # root_password
         if [[ -n "${arg_root_password}" ]]; then
@@ -593,6 +605,7 @@ function get_psy_projects() {
         $'' \
         "    all:                  \"${all}\"" \
         "    git:                  \"${git}\"" \
+        "    install:              \"${install}\"" \
         "    list:                 \"${list}\"" \
         "    directory:            \"${directory}\"" \
         "    project:              \"${project}\"" \
@@ -607,5 +620,4 @@ function get_psy_projects() {
   gpp__get_psy_projects
 }
 
-clear
 get_psy_projects "${@}"
