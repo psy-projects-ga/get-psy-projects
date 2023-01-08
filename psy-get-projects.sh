@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-function get_psy_projects() {
+function psy_get_projects() {
   { #helpers
     _help() {
       cat <<-EOF
@@ -88,7 +88,7 @@ function get_psy_projects() {
   }
 
   { #utilities
-    gpp__get_psy_projects() {
+    pgp__psy_get_projects() {
       { #helpers
         normalize_path() {
           declare \
@@ -397,14 +397,14 @@ function get_psy_projects() {
       }
 
       { #utilities
-        gpp__run_get_psy_projects() {
+        pgp__run_psy_get_projects() {
           { #helpers
-            gpp__print_all_projects() {
+            pgp__print_all_projects() {
               printf "\n\e[2;4;92m%s\e[0m\n\n" "List all Psy-Projects and Repositories:"
-              for gpp__select_project in "${iarr_gpp__psy_projects[@]}"; do
+              for pgp__select_project in "${iarr_pgp__psy_projects[@]}"; do
                 printf "\e[96m%s \e[93m\"%s\"\e[0m\n" \
-                  "Project: " "${gpp__select_project}" \
-                  "Repo:    " "${aarr_gpp__psy_projects_repos[${gpp__select_project}]}"
+                  "Project: " "${pgp__select_project}" \
+                  "Repo:    " "${aarr_pgp__psy_projects_repos[${pgp__select_project}]}"
 
                 printf "\n\n"
               done
@@ -412,15 +412,15 @@ function get_psy_projects() {
               exit 0
             }
 
-            gpp__get_github_reposity() {
+            pgp__get_github_reposity() {
               return 1
               declare \
                 select_repo="${select_repo:-}"
 
-              for gpp__select_project in "${iarr_gpp__psy_projects[@]}"; do
+              for pgp__select_project in "${iarr_pgp__psy_projects[@]}"; do
                 declare path_repo_directory="${path_repo_directory:+}"
 
-                gpp__select_repo="${gpp__select_project#*/}"
+                pgp__select_repo="${pgp__select_project#*/}"
 
                 path_repo_directory="${path_psy_projects_directory}/${select_repo#*/}"
                 url_github_repo="https://${psy_github_token}@github.com/${select_repo}.git"
@@ -466,22 +466,22 @@ function get_psy_projects() {
 
           :
 
-          ((list)) && gpp__print_all_projects && exit 0
-          ((git)) && gpp__get_github_reposity
+          ((list)) && pgp__print_all_projects && exit 0
+          ((git)) && pgp__get_github_reposity
 
-          for gpp__select_project in "${iarr_gpp__download_projects[@]}"; do
+          for pgp__select_project in "${iarr_pgp__download_projects[@]}"; do
             { #config
-              [[ -z "${gpp__select_project}" ]] && continue
+              [[ -z "${pgp__select_project}" ]] && continue
 
               check_element_in_index_array \
-                --name "iarr_gpp__psy_projects" \
-                --element "${gpp__select_project}" ||
-                throw_error "Project \"${gpp__select_project}\" not found."
+                --name "iarr_pgp__psy_projects" \
+                --element "${pgp__select_project}" ||
+                throw_error "Project \"${pgp__select_project}\" not found."
             }
 
             printf "\e[96m%s \e[93m\"%s\"\e[0m\n" \
-              "Project: " "${gpp__select_project}" \
-              "Repo:    " "${aarr_gpp__psy_projects_repos[${gpp__select_project}]}"
+              "Project: " "${pgp__select_project}" \
+              "Repo:    " "${aarr_pgp__psy_projects_repos[${pgp__select_project}]}"
 
             printf "\n\n"
           done
@@ -490,32 +490,32 @@ function get_psy_projects() {
 
       { #variables
         unset -v \
-          iarr_gpp__psy_projects \
-          iarr_gpp__download_projects \
-          aarr_gpp__psy_projects_repos
+          iarr_pgp__psy_projects \
+          iarr_pgp__download_projects \
+          aarr_pgp__psy_projects_repos
 
         declare \
-          gpp__path_psy_projects_directory="${gpp__path_psy_projects_directory:+}" \
-          gpp__select_project="${gpp__select_project:+}" \
-          gpp__select_repo="${gpp__select_repo:+}"
+          pgp__path_psy_projects_directory="${pgp__path_psy_projects_directory:+}" \
+          pgp__select_project="${pgp__select_project:+}" \
+          pgp__select_repo="${pgp__select_repo:+}"
 
         declare -a \
-          iarr_gpp__download_projects \
-          iarr_gpp__psy_projects
+          iarr_pgp__download_projects \
+          iarr_pgp__psy_projects
 
-        declare -A aarr_gpp__psy_projects_repos
+        declare -A aarr_pgp__psy_projects_repos
       }
 
       { #setting-variables
 
-        { # gpp__path_psy_projects_directory
-          gpp__path_psy_projects_directory="$(normalize_path "${directory}")"
+        { # pgp__path_psy_projects_directory
+          pgp__path_psy_projects_directory="$(normalize_path "${directory}")"
 
           # [[ -d "${path_output_directory}" ]] || mkdir -p "${path_output_directory}"
         }
 
-        { # iarr_gpp__psy_projects
-          iarr_gpp__psy_projects=(
+        { # iarr_pgp__psy_projects
+          iarr_pgp__psy_projects=(
             "bash-core-library"
             "psy-bash-tools"
             "psy-dev-utilities"
@@ -526,8 +526,8 @@ function get_psy_projects() {
           )
         }
 
-        { # aarr_gpp__psy_projects_repos
-          aarr_gpp__psy_projects_repos=(
+        { # aarr_pgp__psy_projects_repos
+          aarr_pgp__psy_projects_repos=(
             ["bash-core-library"]="psy-projects-bash/bash-core-library"
             ["psy-bash-tools"]="psy-projects-bash/psy-bash-tools"
             ["psy-dev-utilities"]="psy-projects-bash/psy-dev-utilities"
@@ -538,18 +538,18 @@ function get_psy_projects() {
           )
         }
 
-        { # iarr_gpp__download_projects
+        { # iarr_pgp__download_projects
           if ((all)); then
-            iarr_gpp__download_projects=("${iarr_gpp__psy_projects[@]}")
+            iarr_pgp__download_projects=("${iarr_pgp__psy_projects[@]}")
           else
-            iarr_gpp__download_projects=("${project}")
+            iarr_pgp__download_projects=("${project}")
           fi
         }
       }
 
       :
 
-      gpp__run_get_psy_projects
+      pgp__run_psy_get_projects
     }
   }
 
@@ -617,7 +617,7 @@ function get_psy_projects() {
 
   :
 
-  gpp__get_psy_projects
+  pgp__psy_get_projects
 }
 
-get_psy_projects "${@}"
+psy_get_projects "${@}"
