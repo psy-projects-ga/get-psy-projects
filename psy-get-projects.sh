@@ -741,7 +741,7 @@ function psy_get_projects() {
     config_parse_args "${@}"
 
     { # options
-      [[ -n "${directory}" ]] || directory="${HOME}/installations"
+      [[ -n "${directory}" ]] || directory="${HOME}/installations/psy-projects"
 
       ! ((list)) && ! ((all)) && [[ -z "${project}" ]] && throw_error "Option \"--project\" is required."
 
