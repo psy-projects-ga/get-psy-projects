@@ -584,7 +584,12 @@ function psy_get_projects() {
         :
 
         pgp__print_debug() {
-          print_log_line "GET GIT" "${pgp__arg_project//-/ }"
+          if ((git)); then
+            print_log_line "GET GIT" "${pgp__arg_project//-/ }"
+          else
+            print_log_line "GET" "${pgp__arg_project//-/ }"
+          fi
+
           printf "           \e[2;96m%s \e[93m\"%s\"\e[0m\n" \
             "Project:   " "${pgp__arg_project}" \
             "Repo:      " "${pgp__arg_repo}" \
