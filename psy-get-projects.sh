@@ -880,36 +880,40 @@ function psy_get_projects() {
 				pgp__path_psy_projects_directory="$(normalize_path "${directory}")"
 
 				{ # token
-					if [[ -n "${arg_git_token}" ]]; then
-						token="${arg_git_token}"
-					elif [[ "${!PSY*}" ]]; then
-						: "${!PSY*}" && token="${!_}"
-					else
-						print_input \
-							--password \
-							--label "Enter your Github Token" \
-							--prompt "Token" \
-							--placeholder "ghp_4CEGFCeycSecc23dasd32dfds5k" \
-							--var-output "token"
-					fi
-
-					[[ -z "${token}" ]] && throw_error "Token is required."
-				}
-
-				{ # root_password
-					((install)) &&
-						if [[ -n "${arg_root_password}" ]]; then
-							root_password="${arg_root_password}"
-						elif [[ -n "${ROOT_PASSWORD:-}" ]]; then
-							root_password="${ROOT_PASSWORD}"
+					((list)) || {
+						if [[ -n "${arg_git_token}" ]]; then
+							token="${arg_git_token}"
+						elif [[ "${!PSY*}" ]]; then
+							: "${!PSY*}" && token="${!_}"
 						else
 							print_input \
 								--password \
-								--label "Enter your Root Password" \
-								--prompt "Password" \
-								--placeholder "P4s5w0RD" \
-								--var-output "root_password"
+								--label "Enter your Github Token" \
+								--prompt "Token" \
+								--placeholder "ghp_4CEGFCeycSecc23dasd32dfds5k" \
+								--var-output "token"
 						fi
+
+						[[ -z "${token}" ]] && throw_error "Token is required."
+					}
+				}
+
+				{ # root_password
+					((list)) || {
+						((install)) &&
+							if [[ -n "${arg_root_password}" ]]; then
+								root_password="${arg_root_password}"
+							elif [[ -n "${ROOT_PASSWORD:-}" ]]; then
+								root_password="${ROOT_PASSWORD}"
+							else
+								print_input \
+									--password \
+									--label "Enter your Root Password" \
+									--prompt "Password" \
+									--placeholder "P4s5w0RD" \
+									--var-output "root_password"
+							fi
+					}
 				}
 
 				{ # iarr_pgp__psy_projects
