@@ -94,11 +94,10 @@ function psy_get_projects() {
 					{ #helpers
 						_help() {
 							cat <<-EOF
-
-								$(printf "\e[1m%s\e[0m" "Get-github-tarball")
+								$(printf "\e[1m%s\e[0m" "Get_github_tarball")
 
 								$(printf "\e[1;4m%s\e[0m" "Usage:")
-								  get-github-tarball [--options]
+								  get_github_tarball [--options]
 
 								$(printf "\e[1;4m%s\e[0m" "Options:")
 								  -h, --help      <boolean?>      Display this help information.
@@ -108,9 +107,9 @@ function psy_get_projects() {
 								  -O, --output    <string>       Set Output path directory value.
 
 								$(printf "\e[1;4m%s\e[0m" "Examples:")
-								  get-github-tarball -o "psy" -r "bash-library" -t "ghp_123..." -O "./lib"
+								  get_github_tarball -o "psy" -r "bash-library" -t "ghp_123..." -O "./lib"
 
-								  get-github-tarball \ 
+								  get_github_tarball \ 
 								    --owner "psy" \ 
 								    --repo "bash-library" \ 
 								    --token "ghp_123..." \ 
@@ -285,11 +284,10 @@ function psy_get_projects() {
 					{ #helpers
 						_help() {
 							cat <<-EOF
-
-								$(printf "\e[1m%s\e[0m" "Get-github-repository")
+								$(printf "\e[1m%s\e[0m" "Get_github_repo")
 
 								$(printf "\e[1;4m%s\e[0m" "Usage:")
-								  get-github-repository [--options]
+								  get_github_repo [--options]
 
 								$(printf "\e[1;4m%s\e[0m" "Options:")
 								  -h, --help      <boolean?>      Display this help information.
@@ -299,9 +297,9 @@ function psy_get_projects() {
 								  -O, --output    <string>       Set Output path directory value.
 
 								$(printf "\e[1;4m%s\e[0m" "Examples:")
-								  get-github-repository -o "psy" -r "bash-library" -t "ghp_123..." -O "./lib"
+								  get_github_repo -o "psy" -r "bash-library" -t "ghp_123..." -O "./lib"
 
-								  get-github-repository \ 
+								  get_github_repo \ 
 								    --owner "psy" \ 
 								    --repo "bash-library" \ 
 								    --token "ghp_123..." \ 
@@ -410,6 +408,200 @@ function psy_get_projects() {
 					:
 
 					run_get_github_repo
+				}
+
+				print_input() {
+					{ #helpers
+						_help() {
+							cat <<-EOF
+								$(printf "\e[1;93m%s\e[0m" "Print_input")
+
+								$(printf "\e[1;4;93m%s\e[0m" "Usage:")
+								  print_input [--options]
+
+								$(printf "\e[1;4;93m%s\e[0m" "Options:")
+								  -h, --help            <boolean?>      Display this help information.
+								  -l, --label           <string?>       Set Label value.
+								  -o, --var-output      <string?>       Set Output-Value name variable.
+								  -p, --password        <boolean?>      Enable Password mode.
+								  -P, --prompt          <string?>       Set Prompt value.
+								  -T, --placeholder     <string?>       Set Placeholder value.
+
+								$(printf "\e[1;4;93m%s\e[0m" "Examples:")
+								  print_input -l "Login" -P "Username: " -T "Enter your username" -o "username_variable"
+
+								  print_input \ 
+								    --label "Login" \ 
+								    --prompt "Username" \ 
+								    --placeholder "Enter your username" \ 
+								    --var-output "username_variable"
+							EOF
+
+							exit 0
+						}
+
+						config_parse_args() {
+							((${#})) || _help
+
+							while ((${#})); do
+								arg="${1:-}" val="${2:-}" && shift
+
+								case "${arg}" in
+								-h | --help) _help ;;
+								-o | --var-output) name_variable_output="${val:?"Option \"${arg}\" requires an argument."}" && shift ;;
+								-l | --label) label="${val:?"Option \"${arg}\" requires an argument."}" && shift ;;
+								-p | --password) mode_password="1" ;;
+								-P | --prompt) prompt="${val:?"Option \"${arg}\" requires an argument."}" && shift ;;
+								-T | --placeholder) placeholder="${val:?"Option \"${arg}\" requires an argument."}" && shift ;;
+								*) throw_error "Unknown option \"${arg}\"" ;;
+								esac
+							done
+						}
+					}
+
+					{ #utilities
+						pi__print_input() {
+							{ #helpers
+								pi__get_input_from_stdin() {
+									declare k1 k2 k3
+
+									while :; do
+										IFS= read -rsn1 pi__character 2>/dev/null >&2
+
+										read -rsn1 -t 0.0001 k1
+										read -rsn1 -t 0.0001 k2
+										read -rsn1 -t 0.0001 k3
+										pi__character+="${k1}${k2}${k3}"
+
+										[[ -z "${pi__character}" ]] && printf "\e[2K\e[1A\e[2K\e[1A\e[2K\e[0G" && break
+
+										case "${pi__character}" in
+										$'\x7f') # backspace
+											((${#pi__input_line})) && {
+												pi__input_line="${pi__input_line%?}"
+												printf "\b \b"
+
+												[[ -z "${pi__input_line}" ]] &&
+													printf "%s" "${pi__placeholder}"
+											}
+											;;
+										$'\x0a') : ;;             # enter/return
+										$'\x1b') break ;;         # escape
+										$'\e[F') : ;;             # end
+										$'\e[H') : ;;             # home
+										$'\x1b\x5b\x32\x7e') : ;; # insert
+										$'\x1b\x5b\x41') : ;;     # up
+										$'\x1b\x5b\x42') : ;;     # down
+										$'\x1b\x5b\x43') : ;;     # right
+										$'\x1b\x5b\x44') : ;;     # left
+										$'\x1b\x5b\x35\x7e') : ;; # page up
+										$'\x1b\x5b\x36\x7e') : ;; # page down
+										*)
+											[[ -z "${pi__input_line}" ]] &&
+												printf "%s\e[%sD" \
+													"${pi__filler_placeholder}" "${#placeholder}"
+
+											pi__input_line+="${pi__character}"
+
+											if ((mode_password)); then
+												printf "*"
+											else
+												printf "%s" "${pi__character}"
+											fi
+											;;
+										esac
+									done
+								}
+							}
+
+							{ #utilities
+								pi__build_input_line() {
+									[[ -n "${label}" ]] && printf "%s\n" "${pi__label}"
+									[[ -n "${prompt}" ]] && printf "%s" "${pi__prompt}"
+									[[ -n "${placeholder}" ]] && printf "%s" "${pi__placeholder}"
+
+									pi__get_input_from_stdin
+
+									if [[ -n "${name_variable_output}" ]]; then
+										declare -n pi__output="${name_variable_output}"
+										[[ -n "${pi__input_line}" ]] &&
+											pi__output="${pi__input_line}"
+									else
+										[[ -n "${pi__input_line}" ]] &&
+											printf "%s\n\n" "${pi__input_line}"
+									fi
+								}
+							}
+
+							{ #variables
+								declare \
+									pi__label="${pi__label:+}" \
+									pi__prompt="${pi__prompt:+}" \
+									pi__placeholder="${pi__placeholder:+}" \
+									pi__input_line="${pi__input_line:+}" \
+									pi__character="${pi__character:+}" \
+									pi__output="${pi__output:+}"
+							}
+
+							{ #setting-variables
+
+								{ # pi__label
+									printf -v pi__label "\n\t\e[92m%-10s \e[0m" \
+										"${label^}"
+								}
+
+								{ # pi__prompt
+									printf -v pi__prompt "\n\t\e[96m%-10s : \e[0m" \
+										"${prompt^}"
+								}
+
+								{ # update placeholder
+									if [[ -n "${name_variable_output}" ]]; then
+										declare -n pi__output="${name_variable_output}"
+
+										[[ -n "${pi__output}" ]] && {
+											placeholder="${pi__output}"
+										}
+									fi
+								}
+
+								{ # pi__placeholder
+									printf -v pi__placeholder "\e[38;5;236m%s\e[0m\e[%sD" \
+										"${placeholder}" "${#placeholder}"
+								}
+
+								{ # pi__filler_placeholder
+									printf -v pi__filler_placeholder "%${#placeholder}s" " "
+								}
+							}
+
+							:
+
+							pi__build_input_line
+						}
+					}
+
+					{ #variables
+						declare -i mode_password="${mode_password:+0}"
+
+						declare \
+							name_variable_output="${name_variable_output:+}" \
+							label="${label:+}" \
+							prompt="${prompt:+}" \
+							placeholder="${placeholder:+}"
+					}
+
+					{ #setting-variables
+						config_parse_args "${@}"
+
+						{ # options
+							[[ -n "${placeholder}" ]] || placeholder="Type text..."
+						}
+					}
+
+					:
+
+					pi__print_input
 				}
 
 				:
@@ -603,7 +795,7 @@ function psy_get_projects() {
 					((install)) || return 0
 
 					printf "%s\n" "${root_password}" |
-						sudo ln -sf \
+						sudo ln -sfv \
 							"${pgp__path_repo_installation_directory}/${pgp__arg_project}.sh" \
 							"/usr/local/bin/${pgp__arg_project}"
 				}
@@ -687,6 +879,39 @@ function psy_get_projects() {
 			{ #setting-variables
 				pgp__path_psy_projects_directory="$(normalize_path "${directory}")"
 
+				{ # token
+					if [[ -n "${arg_git_token}" ]]; then
+						token="${arg_git_token}"
+					elif [[ "${!PSY*}" ]]; then
+						: "${!PSY*}" && token="${!_}"
+					else
+						print_input \
+							--password \
+							--label "Enter your Github Token" \
+							--prompt "Token" \
+							--placeholder "ghp_4CEGFCeycSecc23dasd32dfds5k" \
+							--var-output "token"
+					fi
+
+					[[ -z "${token}" ]] && throw_error "Token is required."
+				}
+
+				{ # root_password
+					((install)) &&
+						if [[ -n "${arg_root_password}" ]]; then
+							root_password="${arg_root_password}"
+						elif [[ -n "${ROOT_PASSWORD:-}" ]]; then
+							root_password="${ROOT_PASSWORD}"
+						else
+							print_input \
+								--password \
+								--label "Enter your Root Password" \
+								--prompt "Password" \
+								--placeholder "P4s5w0RD" \
+								--var-output "root_password"
+						fi
+				}
+
 				{ # iarr_pgp__psy_projects
 					iarr_pgp__psy_projects=(
 						"bash-core-library"
@@ -749,26 +974,7 @@ function psy_get_projects() {
 			[[ -n "${directory}" ]] || directory="${HOME}/installations/psy-projects"
 
 			! ((list)) && ! ((all)) && [[ -z "${project}" ]] && throw_error "Option \"--project\" is required."
-
-			{ # root_password
-				if [[ -n "${arg_root_password}" ]]; then
-					root_password="${arg_root_password}"
-				elif [[ -n "${ROOT_PASSWORD:-}" ]]; then
-					root_password="${ROOT_PASSWORD}"
-				fi
-			}
-
-			{ # token
-				if [[ -n "${arg_git_token}" ]]; then
-					token="${arg_git_token}"
-				else
-					if [[ "${!PSY*}" ]]; then
-						: "${!PSY*}" && token="${!_}"
-					else
-						throw_error "Option \"--token\" is required."
-					fi
-				fi
-			}
+			((git)) && ! type git &>/dev/null && throw_error "command \"git\" is required"
 		}
 
 		: || { # debug
