@@ -753,9 +753,10 @@ function psy_get_projects() {
 					((list)) && pgp__print_all_projects && exit 0
 
 					for pgp__select_project in "${iarr_pgp__download_projects[@]}"; do
-						{ #config
+						{ # alias
 							case "${pgp__select_project}" in
 							"ved") pgp__select_project="virtual-env-docker" ;;
+							"core") pgp__select_project="bash-core-library" pgp__core_alias_directory=1 ;;
 							"") continue ;;
 							esac
 
@@ -809,6 +810,7 @@ function psy_get_projects() {
 
 						{ # alias
 							case "${pgp__select_project}" in
+							"bash-core-library") printf "\e[96m%s \e[93m\"%s\"\e[0m\n" "Alias:   " "core" ;;
 							"virtual-env-docker") printf "\e[96m%s \e[93m\"%s\"\e[0m\n" "Alias:   " "ved" ;;
 							esac
 						}
@@ -832,6 +834,8 @@ function psy_get_projects() {
 						:
 
 						pgp__path_repo_installation_directory="${pgp__arg_directory}/${pgp__arg_repo}"
+
+						((pgp__core_alias_directory)) && pgp__path_repo_installation_directory="${HOME}/.cache/psy/bash-projects/lib/bash-core-library"
 					}
 
 					:
@@ -864,6 +868,8 @@ function psy_get_projects() {
 					iarr_pgp__download_projects \
 					aarr_pgp__psy_projects_repos
 
+				declare -i pgp__core_alias_directory="${pgp__core_alias_directory:+0}"
+
 				declare \
 					pgp__path_psy_projects_directory="${pgp__path_psy_projects_directory:+}" \
 					pgp__select_project="${pgp__select_project:+}" \
@@ -879,16 +885,20 @@ function psy_get_projects() {
 			{ #setting-variables
 				pgp__path_psy_projects_directory="$(normalize_path "${directory}")"
 
-				{ #project
+				{ # project
 					! ((list)) &&
 						! ((all)) &&
-						[[ -z "${project}" ]] &&
+						[[ -z "${project}" ]] && {
 						print_input \
 							--label "Enter your Project name" \
 							--prompt "Project" \
 							--var-output "project"
 
-					[[ -z "${project}" ]] && throw_error "Option \"--project\" is required."
+						[[ -z "${project}" ]] && throw_error "Option \"--project\" is required."
+					}
+
+					! ((list)) &&
+						[[ -z "${project}" ]] && throw_error "Option \"--project\" is required."
 				}
 
 				{ # token
