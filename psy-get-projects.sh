@@ -36,7 +36,7 @@ function psy_get_projects() {
 			# set -- "|" "${@//$'\n'/$'\n'"| "}" "|"
 			# echo "${@//$'\n'/"   | "$'\n'}"
 
-			exit 0
+			# exit 0
 		}
 
 		config_parse_args() {
@@ -879,6 +879,18 @@ function psy_get_projects() {
 			{ #setting-variables
 				pgp__path_psy_projects_directory="$(normalize_path "${directory}")"
 
+				{ #project
+					! ((list)) &&
+						! ((all)) &&
+						[[ -z "${project}" ]] &&
+						print_input \
+							--label "Enter your Project name" \
+							--prompt "Project" \
+							--var-output "project"
+
+					[[ -z "${project}" ]] && throw_error "Option \"--project\" is required."
+				}
+
 				{ # token
 					((list)) || {
 						if [[ -n "${arg_git_token}" ]]; then
@@ -977,7 +989,6 @@ function psy_get_projects() {
 		{ # options
 			[[ -n "${directory}" ]] || directory="${HOME}/installations/psy-projects"
 
-			! ((list)) && ! ((all)) && [[ -z "${project}" ]] && throw_error "Option \"--project\" is required."
 			((git)) && ! type git &>/dev/null && throw_error "command \"git\" is required"
 		}
 
