@@ -10,15 +10,16 @@ function psy_get_projects() {
 				  get-psy-projects [--options]
 
 				$(printf "\e[1;4m%s\e[0m" "Options:")
-				  -h, --help             <boolean?>      Display this help information.
-				  -a, --all              <boolean?>      Enable download All projects.
-				  -d, --directory        <string?>       Set Directory path value. (Default: "~/installations")
-				  -g, --git              <boolean?>      Enable get Git repository instead of Tarball.
-				  -i, --install          <boolean?>      Enable Install project in Path.
-				  -l, --list             <boolean?>      Enable List projects.
-				  -p, --project          <string>       Set Project value.
-				  -r, --root-password    <string?>       Set Root-Password value.
-				  -t, --token            string>        Set Github Token value.
+				  -h, --help               <boolean?>      Display this help information.
+				  -a, --all                <boolean?>      Enable download All projects.
+				  -d, --directory          <string?>       Set Directory path value. (Default: "~/installations")
+				  -g, --git                <boolean?>      Enable get Git repository instead of Tarball.
+				  -i, --install            <boolean?>      Enable Install project in Path.
+				  -l, --list               <boolean?>      Enable List projects.
+				  -p, --project            <string>        Set Project value.
+				  -r, --root-password      <string?>       Set Root-Password value.
+				  -t, --token              <string>        Set Github Token value.
+				  -G, --generate-dotenv    <boolean?>      Enable Generate-Dotenv file.
 
 				$(printf "\e[1;4m%s\e[0m" "Examples:")
 				  get-psy-projects -p "bash-library" -d "~/installations" t "ghp_123..."
@@ -36,19 +37,20 @@ function psy_get_projects() {
 			# set -- "|" "${@//$'\n'/$'\n'"| "}" "|"
 			# echo "${@//$'\n'/"   | "$'\n'}"
 
-			# exit 0
+			exit 0
 		}
 
 		config_parse_args() {
-			((${#})) || _help
+			# ((${#})) || _help
 
-			while getopts ":-:had:gilp:r:t:" opt; do
+			while getopts ":-:hagGild:p:r:t:" opt; do
 				case "${opt}" in
 				h) _help ;;
 				a) all="1" ;;
 				g) git="1" ;;
 				i) install="1" ;;
 				l) list="1" ;;
+				G) generate_dotenv="1" ;;
 				d) directory="${OPTARG}" ;;
 				p) project="${OPTARG}" ;;
 				r) arg_root_password="${OPTARG}" ;;
@@ -60,6 +62,7 @@ function psy_get_projects() {
 					git) git="1" ;;
 					install) install="1" ;;
 					list) list="1" ;;
+					generate-dotenv) generate_dotenv="1" ;;
 					directory) directory="${!OPTIND:?"Option \"--${OPTARG}\" requires an argument."}" && ((OPTIND++)) ;;
 					project) project="${!OPTIND:?"Option \"--${OPTARG}\" requires an argument."}" && ((OPTIND++)) ;;
 					root-password) arg_root_password="${!OPTIND:?"Option \"--${OPTARG}\" requires an argument."}" && ((OPTIND++)) ;;
@@ -604,6 +607,183 @@ function psy_get_projects() {
 					pi__print_input
 				}
 
+				print_confirm() {
+					{ #helpers
+						_help() {
+							cat <<-EOF
+								$(printf "\e[1m%s\e[0m" "Print::Print_confirm")
+
+								$(printf "\e[1;4m%s\e[0m" "Usage:")
+								  print_confirm [--options]
+
+								$(printf "\e[1;4m%s\e[0m" "Options:")
+								  -h, --help           <boolean?>      Display this help information.
+								  -l, --label          <string?>       Set Label value.
+								  -q, --question       <string?>       Set Question value.
+								  -Y, --default-yes    <boolean?>      Enable Yes Default value.
+								  -N, --default-no     <boolean?>      Enable No Default value.
+								  -D, --default-off    <boolean?>      Disable Default value.
+
+								$(printf "\e[1;4m%s\e[0m" "Examples:")
+								  print_confirm -l "Label" -q "do you want to continue?" -Y
+
+								  print_confirm \ 
+								    --label "Label" \ 
+								    --question "do you want to continue?" \ 
+								    --default-yes
+
+							EOF
+
+							exit 0
+						}
+
+						config_parse_args() {
+							((${#})) || _help
+
+							while ((${#})); do
+								arg="${1:-}" val="${2:-}" && shift
+
+								case "${arg}" in
+								-h | --help) _help ;;
+								-l | --label) label="${val:?"Option \"${arg}\" requires an argument."}" && shift ;;
+								-q | --question) question="${val:?"Option \"${arg}\" requires an argument."}" && shift ;;
+								-Y | --default-yes) default_yes="1" ;;
+								-N | --default-no) default_no="1" ;;
+								-D | --default-off) default_off="1" ;;
+								*) throw_error "Unknown option \"${arg}\"" ;;
+								esac
+							done
+						}
+					}
+
+					{ #utilities
+						pc__print_confirm() {
+							{ #utilities
+								pc__print_question_interactive() {
+									printf "\e7" # Save the current cursor position
+
+									while :; do
+										[[ -n "${label}" ]] && printf "%s\n" "${label}"
+
+										if ((pc__suggestion)); then
+											printf "%s\n" "${pc__suggestion_prompt}"
+										else
+											printf "%s\n" "${pc__prompt}"
+										fi
+
+										read -r pc__reply </dev/tty
+
+										if [[ -z "${pc__reply}" ]]; then
+											pc__reply="${pc__default}"
+										fi
+
+										case "${pc__reply^^}" in
+										Y*) printf "\n" && return 0 ;;
+										N*) printf "\n" && return 1 ;;
+										*)
+											printf "\e8"
+											printf "\e[J"
+											pc__suggestion=1
+											;;
+										esac
+									done
+								}
+							}
+
+							{ #variables
+								declare -i \
+									pc__suggestion="${pc__suggestion:+0}"
+
+								declare \
+									pc__default="${pc__default:+}" \
+									pc__prompt="${pc__prompt:+}" \
+									pc__suggestion_prompt="${pc__suggestion_prompt:+}" \
+									pc__is_dry_run_prefix="${pc__is_dry_run_prefix:+}" \
+									pc__current_cursor_position="${pc__current_cursor_position:+}" \
+									pc__reply="${pc__reply:+}"
+							}
+
+							{ #setting-variables
+
+								{ # pc__default
+									pc__default="off"
+									((default_yes)) && pc__default="Y"
+									((default_no)) && pc__default="N"
+									((default_off)) && pc__default="off"
+								}
+
+								{ # pc__prompt
+									case "${pc__default}" in
+									"Y")
+										pc__prompt="Y/n"
+										;;
+									"N")
+										pc__prompt="y/N"
+										;;
+									"off")
+										pc__prompt="y/n"
+										;;
+									esac
+
+									printf -v "pc__prompt" "%s  [ %s ]" "${question}" "${pc__prompt}"
+								}
+
+								{ # pc__is_dry_run_prefix
+									if ((dry_run)); then
+										pc__is_dry_run_prefix="[Dry-Run]-"
+
+										printf -v "label" "%s" "${pc__is_dry_run_prefix}${label}"
+									else
+										pc__is_dry_run_prefix=""
+									fi
+								}
+
+								{ # pc__suggestion_prompt
+									printf -v "pc__suggestion_prompt" "%s" "Please answer Yes or No."
+									printf -v "pc__suggestion_prompt" "%s\n\n%s" "${pc__prompt}" "${pc__suggestion_prompt}"
+								}
+							}
+
+							:
+
+							pc__print_question_interactive
+						}
+					}
+
+					{ #variables
+						declare -i \
+							dry_run="${dry_run:-0}" \
+							force="${force:-0}" \
+							default_yes="${default_yes:+0}" \
+							default_no="${default_no:+0}" \
+							default_off="${default_off:+0}"
+
+						declare \
+							label="${label:+}" \
+							question="${question:+}"
+					}
+
+					{ #setting-variables
+						config_parse_args "${@}"
+
+						{ # options
+							[[ -n "${question}" ]] || question="do you want to continue?"
+
+							((default_yes)) || default_yes="1"
+
+							((default_no)) && default_yes=0
+							((default_yes)) && default_no=0
+							((default_off)) && default_yes=0
+						}
+					}
+
+					:
+
+					((force)) && return 0
+
+					pc__print_confirm
+				}
+
 				:
 
 				normalize_path() {
@@ -758,11 +938,52 @@ function psy_get_projects() {
 							throw_error "Failed to download \"bash-core-library\""
 					}
 				}
+
+				check_generate_dotenv_file() {
+					{ #config
+						declare \
+							project_main_script_directory="${project_main_script_directory:+}" \
+							project_main_script_file="${project_main_script_file:+}"
+
+						:
+
+						project_main_script_directory="${pgp__path_psy_projects_directory}/${aarr_pgp__psy_projects_repos[${pgp__select_project}]}"
+						project_main_script_file="${project_main_script_directory}/${pgp__select_project}.sh"
+					}
+
+					[[ -f "${project_main_script_file}" ]] && {
+						((generate_dotenv)) && {
+							pushd "${project_main_script_directory}" >/dev/null || throw_error "Failed to change directory to \"${project_main_script_directory}\""
+
+							PSY_GITHUB_TOKEN="${token}" bash "${project_main_script_file}" --generate-dotenv ||
+								throw_error "Failed to generate dotenv file"
+
+							popd >/dev/null || throw_error "Failed to change directory to previous"
+
+							return
+						}
+
+						:
+
+						print_confirm \
+							--default-yes \
+							--question "Do you want to generate dotenv file?" && {
+							pushd "${project_main_script_directory}" >/dev/null || throw_error "Failed to change directory to \"${project_main_script_directory}\""
+
+							PSY_GITHUB_TOKEN="${token}" bash "${project_main_script_file}" --generate-dotenv ||
+								throw_error "Failed to generate dotenv file"
+
+							popd >/dev/null || throw_error "Failed to change directory to previous"
+						}
+					}
+				}
 			}
 
 			{ #utilities
 				pgp__run_psy_get_projects() {
 					((list)) && pgp__print_all_projects && exit 0
+
+					check_core_lib_exists_or_download
 
 					for pgp__select_project in "${iarr_pgp__download_projects[@]}"; do
 						{ # alias
@@ -783,9 +1004,9 @@ function psy_get_projects() {
 							"${pgp__select_project}" \
 							"${aarr_pgp__psy_projects_repos[${pgp__select_project}]}" \
 							"${pgp__path_psy_projects_directory}"
-					done
 
-					check_core_lib_exists_or_download
+						check_generate_dotenv_file
+					done
 				}
 
 				:
@@ -810,7 +1031,8 @@ function psy_get_projects() {
 					((install)) || return 0
 
 					printf "%s\n" "${root_password}" |
-						sudo ln -sfv \
+						sudo -S \
+							ln -sfv \
 							"${pgp__path_repo_installation_directory}/${pgp__arg_project}.sh" \
 							"/usr/local/bin/${pgp__arg_project}"
 				}
@@ -998,7 +1220,8 @@ function psy_get_projects() {
 			all="${all:+0}" \
 			git="${git:+0}" \
 			install="${install:+0}" \
-			list="${list:+0}"
+			list="${list:+0}" \
+			generate_dotenv="${generate_dotenv:+0}"
 
 		declare \
 			directory="${directory:+}" \
