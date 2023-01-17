@@ -746,6 +746,18 @@ function psy_get_projects() {
 						$'\e[38;5;236m'"${pgp__filler_text_line// /─}"$'\e[0m' \
 						$'\e[48;5;233;38;5;226m'"  \"${pgp__arg_right_text^}\"  "$'\e[0m'
 				}
+
+				check_core_lib_exists_or_download() {
+					[[ -f "${pgp__path_core_default_directory}/bash-core-library.sh" ]] || {
+						pgp__core_alias_directory=1
+
+						pgp__download_projects \
+							"bash-core-library" \
+							"${aarr_pgp__psy_projects_repos["bash-core-library"]}" \
+							"${pgp__path_core_default_directory}" >/dev/null ||
+							throw_error "Failed to download \"bash-core-library\""
+					}
+				}
 			}
 
 			{ #utilities
@@ -772,6 +784,8 @@ function psy_get_projects() {
 							"${aarr_pgp__psy_projects_repos[${pgp__select_project}]}" \
 							"${pgp__path_psy_projects_directory}"
 					done
+
+					check_core_lib_exists_or_download
 				}
 
 				:
@@ -835,7 +849,7 @@ function psy_get_projects() {
 
 						pgp__path_repo_installation_directory="${pgp__arg_directory}/${pgp__arg_repo}"
 
-						((pgp__core_alias_directory)) && pgp__path_repo_installation_directory="${HOME}/.cache/psy/bash-projects/lib/bash-core-library"
+						((pgp__core_alias_directory)) && pgp__path_repo_installation_directory="${pgp__path_core_default_directory}"
 					}
 
 					:
@@ -872,6 +886,7 @@ function psy_get_projects() {
 
 				declare \
 					pgp__path_psy_projects_directory="${pgp__path_psy_projects_directory:+}" \
+					pgp__path_core_default_directory="${pgp__path_core_default_directory:+}" \
 					pgp__select_project="${pgp__select_project:+}" \
 					pgp__select_repo="${pgp__select_repo:+}"
 
@@ -884,13 +899,14 @@ function psy_get_projects() {
 
 			{ #setting-variables
 				pgp__path_psy_projects_directory="$(normalize_path "${directory}")"
+				pgp__path_core_default_directory="${HOME}/.cache/psy/bash-projects/lib/bash-core-library"
 
 				{ # project
 					! ((list)) &&
 						! ((all)) &&
 						[[ -z "${project}" ]] && {
 						print_input \
-							--label "Enter your Project name" \
+							--label "Please enter the name of the project you would like to retrieve." \
 							--prompt "Project" \
 							--var-output "project"
 
@@ -910,7 +926,7 @@ function psy_get_projects() {
 						else
 							print_input \
 								--password \
-								--label "Enter your Github Token" \
+								--label "Please enter your GitHub Token" \
 								--prompt "Token" \
 								--placeholder "ghp_4CEGFCeycSecc23dasd32dfds5k" \
 								--var-output "token"
@@ -930,7 +946,7 @@ function psy_get_projects() {
 							else
 								print_input \
 									--password \
-									--label "Enter your Root Password" \
+									--label "Please enter your Root Password" \
 									--prompt "Password" \
 									--placeholder "P4s5w0RD" \
 									--var-output "root_password"
