@@ -977,6 +977,21 @@ function psy_get_projects() {
 						}
 					}
 				}
+
+				pgp__check_root_password() {
+					if [[ -n "${arg_root_password}" ]]; then
+						root_password="${arg_root_password}"
+					elif [[ -n "${ROOT_PASSWORD:-}" ]]; then
+						root_password="${ROOT_PASSWORD}"
+					else
+						print_input \
+							--password \
+							--label "Please enter your Root Password" \
+							--prompt "Password" \
+							--placeholder "P4s5w0RD" \
+							--var-output "root_password"
+					fi
+				}
 			}
 
 			{ #utilities
@@ -1028,7 +1043,17 @@ function psy_get_projects() {
 				}
 
 				pgp__install_project() {
-					((install)) || return 0
+					((install)) || {
+						if
+							print_confirm \
+								--default-yes \
+								--question "Do you want to install \"${pgp__arg_project}\"?"
+						then
+							pgp__check_root_password
+						else
+							return 0
+						fi
+					}
 
 					printf "%s\n" "${root_password}" |
 						sudo -S \
@@ -1159,21 +1184,7 @@ function psy_get_projects() {
 				}
 
 				{ # root_password
-					((list)) || {
-						((install)) &&
-							if [[ -n "${arg_root_password}" ]]; then
-								root_password="${arg_root_password}"
-							elif [[ -n "${ROOT_PASSWORD:-}" ]]; then
-								root_password="${ROOT_PASSWORD}"
-							else
-								print_input \
-									--password \
-									--label "Please enter your Root Password" \
-									--prompt "Password" \
-									--placeholder "P4s5w0RD" \
-									--var-output "root_password"
-							fi
-					}
+					! ((list)) && ((install)) && pgp__check_root_password
 				}
 
 				{ # iarr_pgp__psy_projects
