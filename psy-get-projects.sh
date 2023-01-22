@@ -469,7 +469,7 @@ function psy_get_projects() {
 									declare k1 k2 k3
 
 									while :; do
-										IFS= read -rsn1 pi__character 2>/dev/null >&2
+										IFS= read -rsn1 pi__character &>/dev/null
 
 										read -rsn1 -t 0.0001 k1
 										read -rsn1 -t 0.0001 k2
@@ -519,6 +519,8 @@ function psy_get_projects() {
 
 							{ #utilities
 								pi__build_input_line() {
+									((no_interactive)) && return 0
+
 									[[ -n "${label}" ]] && printf "%s\n" "${pi__label}"
 									[[ -n "${prompt}" ]] && printf "%s" "${pi__prompt}"
 									[[ -n "${placeholder}" ]] && printf "%s" "${pi__placeholder}"
@@ -660,6 +662,8 @@ function psy_get_projects() {
 						pc__print_confirm() {
 							{ #utilities
 								pc__print_question_interactive() {
+									((no_interactive)) && return 0
+
 									printf "\e7" # Save the current cursor position
 
 									while :; do
@@ -931,11 +935,15 @@ function psy_get_projects() {
 					[[ -f "${pgp__path_core_default_directory}/bash-core-library.sh" ]] || {
 						pgp__core_alias_directory=1
 
-						pgp__download_projects \
-							"bash-core-library" \
-							"${aarr_pgp__psy_projects_repos["bash-core-library"]}" \
-							"${pgp__path_core_default_directory}" >/dev/null ||
-							throw_error "Failed to download \"bash-core-library\""
+						(
+							pgp__download_projects \
+								"bash-core-library" \
+								"${aarr_pgp__psy_projects_repos["bash-core-library"]}" \
+								"${pgp__path_core_default_directory}" >/dev/null ||
+								throw_error "Failed to download \"bash-core-library\""
+						) &
+
+						pgp__core_alias_directory=0
 					}
 				}
 
@@ -979,9 +987,10 @@ function psy_get_projects() {
 				}
 
 				pgp__check_root_password() {
+					# shellcheck disable=SC2153
 					if [[ -n "${arg_root_password}" ]]; then
 						root_password="${arg_root_password}"
-					elif [[ -n "${ROOT_PASSWORD:-}" ]]; then
+					elif declare -p ROOT_PASSWORD &>/dev/null; then
 						root_password="${ROOT_PASSWORD}"
 					else
 						print_input \
@@ -1179,7 +1188,7 @@ function psy_get_projects() {
 								--var-output "token"
 						fi
 
-						[[ -z "${token}" ]] && throw_error "Token is required."
+						[[ -z "${token}" ]] && throw_error "Option \"--token\" is required."
 					}
 				}
 
@@ -1228,6 +1237,7 @@ function psy_get_projects() {
 
 	{ #variables
 		declare -i \
+			no_interactive="${no_interactive:-0}" \
 			all="${all:+0}" \
 			git="${git:+0}" \
 			install="${install:+0}" \
