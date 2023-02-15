@@ -20,6 +20,7 @@ function psy_get_projects() {
 				  -r, --root-password      <string?>       Set Root-Password value.
 				  -t, --token              <string>        Set Github Token value.
 				  -G, --generate-dotenv    <boolean?>      Enable Generate-Dotenv file.
+				  -n, --no-interactive     <boolean?>      Disable Interactive mode.
 
 				$(printf "\e[1;4m%s\e[0m" "Examples:")
 				  get-psy-projects -p "bash-library" -d "~/installations" t "ghp_123..."
@@ -43,13 +44,14 @@ function psy_get_projects() {
 		config_parse_args() {
 			# ((${#})) || _help
 
-			while getopts ":-:hagGild:p:r:t:" opt; do
+			while getopts ":-:hagGilnd:p:r:t:" opt; do
 				case "${opt}" in
 				h) _help ;;
 				a) all="1" ;;
 				g) git="1" ;;
 				i) install="1" ;;
 				l) list="1" ;;
+				n) no_interactive="1" ;;
 				G) generate_dotenv="1" ;;
 				d) directory="${OPTARG}" ;;
 				p) project="${OPTARG}" ;;
@@ -62,6 +64,7 @@ function psy_get_projects() {
 					git) git="1" ;;
 					install) install="1" ;;
 					list) list="1" ;;
+					no-interactive) no_interactive="1" ;;
 					generate-dotenv) generate_dotenv="1" ;;
 					directory) directory="${!OPTIND:?"Option \"--${OPTARG}\" requires an argument."}" && ((OPTIND++)) ;;
 					project) project="${!OPTIND:?"Option \"--${OPTARG}\" requires an argument."}" && ((OPTIND++)) ;;
@@ -104,10 +107,10 @@ function psy_get_projects() {
 
 								$(printf "\e[1;4m%s\e[0m" "Options:")
 								  -h, --help      <boolean?>      Display this help information.
-								  -o, --owner     <string>       Set Owner value.
-								  -r, --repo      <string>       Set Repo value.
-								  -t, --token     <string>       Set Token value.
-								  -O, --output    <string>       Set Output path directory value.
+								  -o, --owner     <string>        Set Owner value.
+								  -r, --repo      <string>        Set Repo value.
+								  -t, --token     <string>        Set Token value.
+								  -O, --output    <string>        Set Output path directory value.
 
 								$(printf "\e[1;4m%s\e[0m" "Examples:")
 								  get_github_tarball -o "psy" -r "bash-library" -t "ghp_123..." -O "./lib"
@@ -664,6 +667,8 @@ function psy_get_projects() {
 								pc__print_question_interactive() {
 									((no_interactive)) && return 0
 
+									declare k1 k2 k3
+
 									printf "\e7" # Save the current cursor position
 
 									while :; do
@@ -675,7 +680,15 @@ function psy_get_projects() {
 											printf "%s\n" "${pc__prompt}"
 										fi
 
-										read -r pc__reply </dev/tty
+										IFS= read -rsn1 pc__reply &>/dev/null
+
+										read -rsn1 -t 0.0001 k1
+										read -rsn1 -t 0.0001 k2
+										read -rsn1 -t 0.0001 k3
+
+										pc__reply+="${k1}${k2}${k3}"
+
+										# read -r pc__reply </dev/tty
 
 										if [[ -z "${pc__reply}" ]]; then
 											pc__reply="${pc__default}"
@@ -936,7 +949,8 @@ function psy_get_projects() {
 						pgp__core_alias_directory=1
 
 						(
-							pgp__download_projects \
+							git=0 \
+								pgp__download_projects \
 								"bash-core-library" \
 								"${aarr_pgp__psy_projects_repos["bash-core-library"]}" \
 								"${pgp__path_core_default_directory}" >/dev/null ||
@@ -955,6 +969,8 @@ function psy_get_projects() {
 
 						:
 
+						((no_interactive)) && ! ((generate_dotenv)) && return 0
+
 						project_main_script_directory="${pgp__path_psy_projects_directory}/${aarr_pgp__psy_projects_repos[${pgp__select_project}]}"
 						project_main_script_file="${project_main_script_directory}/${pgp__select_project}.sh"
 					}
@@ -971,35 +987,38 @@ function psy_get_projects() {
 							return
 						}
 
-						:
-
-						print_confirm \
-							--default-yes \
-							--question "Do you want to generate dotenv file?" && {
+						if
+							print_confirm \
+								--default-yes \
+								--question "Do you want to generate dotenv file?"
+						then
 							pushd "${project_main_script_directory}" >/dev/null || throw_error "Failed to change directory to \"${project_main_script_directory}\""
 
 							PSY_GITHUB_TOKEN="${token}" bash "${project_main_script_file}" --generate-dotenv ||
 								throw_error "Failed to generate dotenv file"
 
 							popd >/dev/null || throw_error "Failed to change directory to previous"
-						}
+						fi
 					}
 				}
 
 				pgp__check_root_password() {
-					# shellcheck disable=SC2153
-					if [[ -n "${arg_root_password}" ]]; then
-						root_password="${arg_root_password}"
-					elif declare -p ROOT_PASSWORD &>/dev/null; then
-						root_password="${ROOT_PASSWORD}"
-					else
-						print_input \
-							--password \
-							--label "Please enter your Root Password" \
-							--prompt "Password" \
-							--placeholder "P4s5w0RD" \
-							--var-output "root_password"
-					fi
+					printf "%s\n" "${root_password}" |
+						sudo -S cat /etc/shadow &>/dev/null || {
+						# shellcheck disable=SC2153
+						if [[ -n "${arg_root_password}" ]]; then
+							root_password="${arg_root_password}"
+						elif declare -p ROOT_PASSWORD &>/dev/null; then
+							root_password="${ROOT_PASSWORD}"
+						else
+							print_input \
+								--password \
+								--label "Please enter your Root Password" \
+								--prompt "Password" \
+								--placeholder "P4s5w0RD" \
+								--var-output "root_password"
+						fi
+					}
 				}
 			}
 
@@ -1030,7 +1049,13 @@ function psy_get_projects() {
 							"${pgp__path_psy_projects_directory}"
 
 						check_generate_dotenv_file
+
+						print_log_line "DONE" "${pgp__select_project//-/ }"
+
+						printf "\n"
 					done
+
+					printf "\n\n"
 				}
 
 				:
@@ -1052,7 +1077,11 @@ function psy_get_projects() {
 				}
 
 				pgp__install_project() {
+					((no_interactive)) && ! ((install)) && return 0
+
 					((install)) || {
+						printf "\n\n"
+
 						if
 							print_confirm \
 								--default-yes \
@@ -1063,6 +1092,8 @@ function psy_get_projects() {
 							return 0
 						fi
 					}
+
+					((install)) && printf "\n\n"
 
 					printf "%s\n" "${root_password}" |
 						sudo -S \
@@ -1158,19 +1189,21 @@ function psy_get_projects() {
 				pgp__path_core_default_directory="${HOME}/.cache/psy/bash-projects/lib/bash-core-library"
 
 				{ # project
-					! ((list)) &&
-						! ((all)) &&
-						[[ -z "${project}" ]] && {
-						print_input \
-							--label "Please enter the name of the project you would like to retrieve." \
-							--prompt "Project" \
-							--var-output "project"
+					((all)) || {
+						! ((list)) &&
+							! ((all)) &&
+							[[ -z "${project}" ]] && {
+							print_input \
+								--label "Please enter the name of the project you would like to retrieve." \
+								--prompt "Project" \
+								--var-output "project"
 
-						[[ -z "${project}" ]] && throw_error "Option \"--project\" is required."
+							[[ -z "${project}" ]] && throw_error "Option \"--project\" is required."
+						}
+
+						! ((list)) &&
+							[[ -z "${project}" ]] && throw_error "Option \"--project\" is required."
 					}
-
-					! ((list)) &&
-						[[ -z "${project}" ]] && throw_error "Option \"--project\" is required."
 				}
 
 				{ # token
@@ -1237,12 +1270,12 @@ function psy_get_projects() {
 
 	{ #variables
 		declare -i \
-			no_interactive="${no_interactive:-0}" \
 			all="${all:+0}" \
 			git="${git:+0}" \
 			install="${install:+0}" \
 			list="${list:+0}" \
-			generate_dotenv="${generate_dotenv:+0}"
+			generate_dotenv="${generate_dotenv:+0}" \
+			no_interactive="${no_interactive:+0}"
 
 		declare \
 			directory="${directory:+}" \
@@ -1271,6 +1304,7 @@ function psy_get_projects() {
 				"    git:                  \"${git}\"" \
 				"    install:              \"${install}\"" \
 				"    list:                 \"${list}\"" \
+				"    no_interactive:       \"${no_interactive}\"" \
 				"    directory:            \"${directory}\"" \
 				"    project:              \"${project}\"" \
 				"    root_password:        \"${root_password}\"" \
