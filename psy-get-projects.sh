@@ -36,7 +36,6 @@ function psy_get_projects() {
 
 			# set -- "${__}"
 			# set -- "|" "${@//$'\n'/$'\n'"| "}" "|"
-			# echo "${@//$'\n'/"   | "$'\n'}"
 
 			exit 0
 		}
@@ -1077,10 +1076,18 @@ function psy_get_projects() {
 				}
 
 				pgp__install_project() {
-					((no_interactive)) && ! ((install)) && return 0
+					printf "\n\n"
 
-					((install)) || {
-						printf "\n\n"
+					if ((install)); then
+						pgp__check_root_password
+
+						printf "%s\n" "${root_password}" |
+							sudo -S \
+								ln -sfv \
+								"${pgp__path_repo_installation_directory}/${pgp__arg_project}.sh" \
+								"/usr/local/bin/${pgp__arg_project}"
+					else
+						((no_interactive)) && return
 
 						if
 							print_confirm \
@@ -1088,18 +1095,18 @@ function psy_get_projects() {
 								--question "Do you want to install \"${pgp__arg_project}\"?"
 						then
 							pgp__check_root_password
+
+							printf "%s\n" "${root_password}" |
+								sudo -S \
+									ln -sfv \
+									"${pgp__path_repo_installation_directory}/${pgp__arg_project}.sh" \
+									"/usr/local/bin/${pgp__arg_project}"
 						else
-							return 0
+							return
 						fi
-					}
+					fi
 
-					((install)) && printf "\n\n"
-
-					printf "%s\n" "${root_password}" |
-						sudo -S \
-							ln -sfv \
-							"${pgp__path_repo_installation_directory}/${pgp__arg_project}.sh" \
-							"/usr/local/bin/${pgp__arg_project}"
+					printf "\n\n"
 				}
 
 				pgp__print_all_projects() {
