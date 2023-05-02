@@ -948,7 +948,7 @@ function psy_get_projects() {
 						pgp__core_alias_directory=1
 
 						(
-							git=0 \
+							git=0 pgp__skip_install=1 \
 								pgp__download_projects \
 								"bash-core-library" \
 								"${aarr_pgp__psy_projects_repos["bash-core-library"]}" \
@@ -1076,6 +1076,8 @@ function psy_get_projects() {
 				}
 
 				pgp__install_project() {
+					((pgp__skip_install)) && return
+
 					printf "\n\n"
 
 					if ((install)); then
@@ -1176,7 +1178,9 @@ function psy_get_projects() {
 					iarr_pgp__download_projects \
 					aarr_pgp__psy_projects_repos
 
-				declare -i pgp__core_alias_directory="${pgp__core_alias_directory:+0}"
+				declare -i \
+					pgp__core_alias_directory="${pgp__core_alias_directory:+0}" \
+					pgp__skip_install="${pgp__skip_install:+0}"
 
 				declare \
 					pgp__path_psy_projects_directory="${pgp__path_psy_projects_directory:+}" \
