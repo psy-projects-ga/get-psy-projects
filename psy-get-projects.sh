@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# shellcheck disable=SC2030,SC2031
+set -Eeuo pipefail
+
 function psy_get_projects() {
 	{ #helpers
 		_help() {
@@ -12,63 +15,69 @@ function psy_get_projects() {
 				$(printf "\e[1;4m%s\e[0m" "Options:")
 				  -h, --help               <boolean?>      Display this help information.
 				  -a, --all                <boolean?>      Enable download All projects.
-				  -d, --directory          <string?>       Set Directory path value. (Default: "~/installations")
+				  -f, --force              <boolean?>      Enable Force mode.
+				  -G, --generate-dotenv    <boolean?>      Enable Generate-Dotenv file.
 				  -g, --git                <boolean?>      Enable get Git repository instead of Tarball.
 				  -i, --install            <boolean?>      Enable Install project in Path.
 				  -l, --list               <boolean?>      Enable List projects.
+				  -n, --no-interactive     <boolean?>      Disable Interactive mode.
+				  -s, --ssh                <boolean?>      Enable SSH clone repository.
+				  -d, --directory          <string?>       Set Directory path value. (Default: "~/installations/psy-projects")
+				  -k, --ssh-key            <string?>       Set SSH-Key value.
 				  -p, --project            <string>        Set Project value.
 				  -r, --root-password      <string?>       Set Root-Password value.
 				  -t, --token              <string>        Set Github Token value.
-				  -G, --generate-dotenv    <boolean?>      Enable Generate-Dotenv file.
-				  -n, --no-interactive     <boolean?>      Disable Interactive mode.
 
 				$(printf "\e[1;4m%s\e[0m" "Examples:")
-				  get-psy-projects -p "bash-library" -d "~/installations" t "ghp_123..."
+				  get-psy-projects -p "bash-library" -d "~/installations" -t "ghp_123..."
 
 				  get-psy-projects \ 
 				    --project "bash-library" \ 
 				    --directory "~/installations" \ 
 				    --token "ghp_123..."
 
-				  get-psy-projects --all --git --install
+				  get-psy-projects --all --git --ssh --install
 
 			EOF
-
-			# set -- "${__}"
-			# set -- "|" "${@//$'\n'/$'\n'"| "}" "|"
 
 			exit 0
 		}
 
 		config_parse_args() {
-			# ((${#})) || _help
+			: || ((${#})) || _help
 
-			while getopts ":-:hagGilnd:p:r:t:" opt; do
+			while getopts ":-:hafgGilnsd:k:p:r:t:" opt; do
 				case "${opt}" in
 				h) _help ;;
 				a) all="1" ;;
+				f) force="1" ;;
 				g) git="1" ;;
+				G) generate_dotenv="1" ;;
 				i) install="1" ;;
 				l) list="1" ;;
 				n) no_interactive="1" ;;
-				G) generate_dotenv="1" ;;
+				s) ssh="1" ;;
 				d) directory="${OPTARG}" ;;
+				k) ssh_key="${OPTARG}" ;;
 				p) project="${OPTARG}" ;;
-				r) arg_root_password="${OPTARG}" ;;
-				t) arg_git_token="${OPTARG}" ;;
+				r) root_password="${OPTARG}" ;;
+				t) token="${OPTARG}" ;;
 				-)
 					case "${OPTARG}" in
 					help) _help ;;
 					all) all="1" ;;
+					force) force="1" ;;
 					git) git="1" ;;
+					generate-dotenv) generate_dotenv="1" ;;
 					install) install="1" ;;
 					list) list="1" ;;
 					no-interactive) no_interactive="1" ;;
-					generate-dotenv) generate_dotenv="1" ;;
-					directory) directory="${!OPTIND:?"Option \"--${OPTARG}\" requires an argument."}" && ((OPTIND++)) ;;
-					project) project="${!OPTIND:?"Option \"--${OPTARG}\" requires an argument."}" && ((OPTIND++)) ;;
-					root-password) arg_root_password="${!OPTIND:?"Option \"--${OPTARG}\" requires an argument."}" && ((OPTIND++)) ;;
-					token) arg_git_token="${!OPTIND:?"Option \"--${OPTARG}\" requires an argument."}" && ((OPTIND++)) ;;
+					ssh) ssh="1" ;;
+					directory) directory="${!OPTIND:?$'\n'"$(throw_error "Option \"--${OPTARG}\" requires an argument.")"}" && ((OPTIND++)) ;;
+					ssh-key) ssh_key="${!OPTIND:?$'\n'"$(throw_error "Option \"--${OPTARG}\" requires an argument.")"}" && ((OPTIND++)) ;;
+					project) project="${!OPTIND:?$'\n'"$(throw_error "Option \"--${OPTARG}\" requires an argument.")"}" && ((OPTIND++)) ;;
+					root-password) root_password="${!OPTIND:?$'\n'"$(throw_error "Option \"--${OPTARG}\" requires an argument.")"}" && ((OPTIND++)) ;;
+					token) token="${!OPTIND:?$'\n'"$(throw_error "Option \"--${OPTARG}\" requires an argument.")"}" && ((OPTIND++)) ;;
 					*) throw_error "Unknown long option: \"--${OPTARG}\"" ;;
 					esac
 					;;
@@ -79,14 +88,20 @@ function psy_get_projects() {
 			done
 			shift "$((OPTIND - 1))"
 
-			((${#})) &&
-				: "${*}" &&
-				throw_error "${_:+$'\n'}    Invalid arguments: ${_:+$'\n'}      \"${_// /\"$'\n      \"'}\""
+			((${#})) && : "${*}" &&
+				throw_error "${_:+$'\n'}    Invalid arguments: ${_:+$'\n'}      \"${_// /\"$'\n      \"'}\"" || printf ""
 		}
 
 		throw_error() {
-			printf "\n\e[2;31m%s %s\e[0m\n\n" \
-				"❌[${BASH_SOURCE[-1]##*/}] ERROR:" "${1:-}"
+			printf "%s%s%s" \
+				$'\e[7;5;48;5;226;38;5;124m'" ERROR "$'\e[0m' \
+				$'\e[48;5;233;38;5;124m'" ✘ [${BASH_SOURCE[-1]##*/}] ➤ "$'\e[0m' \
+				$'\e[48;5;233;38;5;196m'"\"${1:-}\""$'\e[K\e[0m\n\n'
+
+			# printf "\e[7;5;48;5;234;38;5;226m %s \e[0m\n" "WARNING"
+			# printf "\e[7;5;48;5;226;38;5;124m %s \e[0m\n" "ERROR"
+			# printf "\e[7;5;48;5;15;38;5;2m %s \e[0m\n"    "INFO"
+			# ⚠ ✔ ❗ ❓ ⚡ ✨
 
 			exit "${2:-1}"
 		}
@@ -95,30 +110,43 @@ function psy_get_projects() {
 	{ #utilities
 		pgp__psy_get_projects() {
 			{ #helpers
-				get_github_tarball() {
+				pgp__print_all_projects() {
+					printf "\e[1;48;5;39;38;5;15m %s \e[K\e[0m\n\n" "     List all Psy-Projects:       "
+
+					for pgp__select_repo in "${iarr_psy_projects[@]}"; do
+						printf "\e[2;7;48;5;254;2;38;5;88m  %s  \e[0m  \e[1;48;5;233;38;5;226m  \"%s\"  \e[K\e[0m\n" \
+							"Owner:" "${aarr_psy_projects_owner[${pgp__select_repo}]}" \
+							"Repo: " "${pgp__select_repo}" \
+							"Alias:" "${aarr_psy_projects_alias[${pgp__select_repo}]}"
+
+						printf "\n"
+					done
+
+					exit 0
+				}
+
+				pgp__download_project() {
 					{ #helpers
 						_help() {
 							cat <<-EOF
-								$(printf "\e[1m%s\e[0m" "Get_github_tarball")
+								$(printf "\e[1m%s\e[0m" "pgp__download_project")
 
 								$(printf "\e[1;4m%s\e[0m" "Usage:")
-								  get_github_tarball [--options]
+								  pgp__download_project [--options]
 
 								$(printf "\e[1;4m%s\e[0m" "Options:")
 								  -h, --help      <boolean?>      Display this help information.
 								  -o, --owner     <string>        Set Owner value.
 								  -r, --repo      <string>        Set Repo value.
-								  -t, --token     <string>        Set Token value.
 								  -O, --output    <string>        Set Output path directory value.
 
 								$(printf "\e[1;4m%s\e[0m" "Examples:")
-								  get_github_tarball -o "psy" -r "bash-library" -t "ghp_123..." -O "./lib"
+								  pgp__download_project -o "psy" -r "bash-project" -O "\${HOME}/installations"
 
-								  get_github_tarball \ 
+								  pgp__download_project \ 
 								    --owner "psy" \ 
-								    --repo "bash-library" \ 
-								    --token "ghp_123..." \ 
-								    --output "./lib"
+								    --repo "bash-project" \ 
+								    --output "\${HOME}/installations"
 
 							EOF
 
@@ -133,10 +161,9 @@ function psy_get_projects() {
 
 								case "${arg}" in
 								-h | --help) _help ;;
-								-o | --owner) owner="${val:?"Option \"${arg}\" requires an argument."}" && shift ;;
-								-r | --repo) repo="${val:?"Option \"${arg}\" requires an argument."}" && shift ;;
-								-t | --token) token="${val:?"Option \"${arg}\" requires an argument."}" && shift ;;
-								-O | --output) path_output_directory="${val:?"Option \"${arg}\" requires an argument."}" && shift ;;
+								-o | --owner) dp__owner="${val:?$'\n'"$(throw_error "Option \"${arg}\" requires an argument.")"}" && shift ;;
+								-r | --repo) dp__repo="${val:?$'\n'"$(throw_error "Option \"${arg}\" requires an argument.")"}" && shift ;;
+								-O | --output) dp__path_output_directory="${val:?$'\n'"$(throw_error "Option \"${arg}\" requires an argument.")"}" && shift ;;
 								*) throw_error "Unknown option \"${arg}\"" ;;
 								esac
 							done
@@ -144,285 +171,394 @@ function psy_get_projects() {
 					}
 
 					{ #utilities
-						run_get_github_tarball() {
+						dp__download_project() {
 							{ #helpers
-								http_request() {
-									if [[ -n "${token}" ]]; then
-										curl \
-											--header "Accept: application/vnd.github+json" \
-											--header "Authorization: Bearer ${token}" \
-											--header "X-GitHub-Api-Version: 2022-11-28" \
-											--location "${url}" \
-											--output "${path_tmp_output_tar_file}" \
-											--write-out "%{http_code}" \
-											--silent
-									else
-										curl \
-											--header "Accept: application/vnd.github+json" \
-											--header "X-GitHub-Api-Version: 2022-11-28" \
-											--location "${url}" \
-											--output "${path_tmp_output_tar_file}" \
-											--write-out "%{http_code}" \
-											--silent
-									fi
-								}
-							}
+								dp__get_tarball() {
+									{ #helpers
+										dp__http_request() {
+											((ssh || git)) && throw_error "options \"--ssh\" and \"--git\" are not allowed"
 
-							{ #utilities
-								run_request() {
-									if ((http_response_code == 200)); then
-										tar \
-											--extract \
-											--gzip \
-											--strip-components=1 \
-											--directory "${path_output_directory}" \
-											--file "${path_tmp_output_tar_file}" ||
-											throw_error "Failed to extract tarball from \"${path_tmp_output_tar_file}\" to \"${path_output_directory}\""
+											dp__http_response_code="$(
+												curl \
+													--header "Accept: application/vnd.github+json" \
+													--header "Authorization: Bearer ${pgp__token}" \
+													--header "X-GitHub-Api-Version: 2022-11-28" \
+													--location "${dp__url}" \
+													--output "${dp__path_tmp_tar_file}" \
+													--write-out "%{http_code}" \
+													--silent
+											)"
+										}
 
-										printf "\e[93m%s  \e[96m\"%s\"\n" \
-											$'\n'"Info:" "Tarball downloaded and extracted successfully from Github" \
-											"Path:" "${path_output_directory}" \
-											"Url: " "github.com/${owner}/${repo}"
+										dp__extract_tarball() {
+											tar \
+												--extract \
+												--gzip \
+												--strip-components=1 \
+												--directory "${dp__path_download_project_directory}" \
+												--file "${dp__path_tmp_tar_file}" ||
+												throw_error "Failed to extract tarball from \"${dp__path_tmp_tar_file}\" to \"${dp__path_output_directory}\""
 
-										printf "\e[0m\n\n"
+											printf "\e[93m%s  \e[96m\"%s\"\n" \
+												$'\n'"Info:" "Tarball downloaded and extracted successfully from Github" \
+												"Path:" "${dp__path_download_project_directory}" \
+												"Url: " "github.com/${dp__owner}/${dp__repo}"
 
-										if type tree &>/dev/null; then
-											tree --dirsfirst "${path_output_directory}"
-										else
-											ls -hasl --color "${path_output_directory}"
-										fi
+											rm -fr "${dp__path_tmp_tar_directory}"
 
-										du -hs "${path_output_directory}"
+											printf "\e[0m\n\n"
+										}
+									}
 
-										rm -fr "${path_tmp_output_directory}"
+									{ #utilities
+										dp__run_get_tarball() {
+											dp__http_request
 
-										return 0
-									else
-										printf "\e[91m%s  \e[95m\"%s\"\n" \
-											$'\n'"ERROR:" "Failed get Tarball from Github" \
-											"Code: " "${http_response_code}" \
-											"Url:  " "${url}"
+											if ((dp__http_response_code == 200)); then
+												dp__extract_tarball
 
-										[[ -s "${path_tmp_output_tar_file}" ]] && cat "${path_tmp_output_tar_file}"
+												dp__list_content_download_project_directory
+											else
+												printf "\e[91m%s  \e[95m\"%s\"\n" \
+													$'\n'"ERROR:" "Failed get Tarball from Github" \
+													"Code: " "${dp__http_response_code}" \
+													"Url:  " "${dp__url}"
 
-										rm -fr "${path_tmp_output_directory}"
+												[[ -s "${dp__path_tmp_tar_file}" ]] && cat "${dp__path_tmp_tar_file}"
 
-										return 1
-									fi
-								}
-							}
+												rm -fr "${dp__path_tmp_tar_directory}"
 
-							{ #variables
-								declare -i http_response_code="${http_response_code:+0}"
+												printf "\e[0m\n\n"
 
-								declare \
-									url="${url:+}" \
-									path_tmp_output_directory="${path_tmp_output_directory:+}" \
-									path_tmp_output_tar_file="${path_tmp_output_tar_file:+}"
-							}
+												throw_error "Failed get Tarball from Github"
+											fi
+										}
+									}
 
-							{ #setting-variables
-								[[ -d "${path_output_directory}" ]] || mkdir -p "${path_output_directory}"
+									{ #variables
+										declare -i dp__http_response_code="${dp__http_response_code:+0}"
 
-								{ # url
-									printf -v "url" "https://%s/%s/%s/%s" \
-										"api.github.com/repos" \
-										"${owner}" \
-										"${repo}" \
-										"tarball"
-								}
+										declare \
+											dp__path_tmp_tar_directory="${dp__path_tmp_tar_directory:+}" \
+											dp__path_tmp_tar_file="${dp__path_tmp_tar_file:+}"
+									}
 
-								{ # path_tmp_output_directory
-									path_tmp_output_directory="$(mktemp --directory -t "get_github_tarball.XXXXXX")"
-								}
+									{ #setting-variables
+										dp__path_tmp_tar_directory="$(mktemp --directory -t "${dp__repo}.XXXXXX")"
+										dp__path_tmp_tar_file="${dp__path_tmp_tar_directory}/${dp__repo}.tar.gz"
 
-								{ # path_tmp_output_tar_file
-									path_tmp_output_tar_file="${path_tmp_output_directory}/${repo}.tar.gz"
+										{ #debug
+											: || printf "\e[92m%s\n" \
+												$'\n' \
+												$'\e[2;92m[DEBUG]\e[0;92m '"${FUNCNAME[0]^}()" \
+												$'' \
+												"    dp__path_tmp_tar_directory:               \"${dp__path_tmp_tar_directory}\"" \
+												"    dp__path_tmp_tar_file:                    \"${dp__path_tmp_tar_file}\"" \
+												$'\e[0m'
+										}
+									}
+
+									:
+
+									dp__run_get_tarball
 								}
 
-								{ # http_response_code
-									http_response_code="$(http_request)"
-								}
-							}
-
-							:
-
-							run_request || throw_error "Failed to get tarball from Github"
-						}
-					}
-
-					{ #variables
-						declare \
-							owner="${owner:+}" \
-							repo="${repo:+}" \
-							token="${token:+}" \
-							path_output_directory="${path_output_directory:+}"
-					}
-
-					{ #setting-variables
-						config_parse_args "${@}"
-
-						type curl &>/dev/null || throw_error "command \"curl\" is required"
-
-						[[ -n "${owner}" ]] || throw_error "option \"--owner\" is required"
-						[[ -n "${repo}" ]] || throw_error "option \"--repo\" is required"
-						[[ -n "${path_output_directory}" ]] || throw_error "option \"--output\" is required"
-
-						: || { # debug
-							printf "\e[92m%s\n" \
-								$'\n\n' \
-								$'\e[2;92m[DEBUG]\e[0;92m '"${FUNCNAME[0]^}()" \
-								"    owner:      \"${owner}\"" \
-								"    repo:       \"${repo}\"" \
-								"    token:      \"${token}\"" \
-								"    output:     \"${path_output_directory}\"" \
-								$'\e[0m'
-						}
-					}
-
-					:
-
-					run_get_github_tarball
-				}
-
-				get_github_repo() {
-					{ #helpers
-						_help() {
-							cat <<-EOF
-								$(printf "\e[1m%s\e[0m" "Get_github_repo")
-
-								$(printf "\e[1;4m%s\e[0m" "Usage:")
-								  get_github_repo [--options]
-
-								$(printf "\e[1;4m%s\e[0m" "Options:")
-								  -h, --help      <boolean?>      Display this help information.
-								  -o, --owner     <string>       Set Owner value.
-								  -r, --repo      <string>       Set Repo value.
-								  -t, --token     <string>       Set Token value.
-								  -O, --output    <string>       Set Output path directory value.
-
-								$(printf "\e[1;4m%s\e[0m" "Examples:")
-								  get_github_repo -o "psy" -r "bash-library" -t "ghp_123..." -O "./lib"
-
-								  get_github_repo \ 
-								    --owner "psy" \ 
-								    --repo "bash-library" \ 
-								    --token "ghp_123..." \ 
-								    --output "./lib"
-
-							EOF
-
-							exit 0
-						}
-
-						config_parse_args() {
-							((${#})) || _help
-
-							while ((${#})); do
-								arg="${1:-}" val="${2:-}" && shift
-
-								case "${arg}" in
-								-h | --help) _help ;;
-								-o | --owner) owner="${val:?"Option \"${arg}\" requires an argument."}" && shift ;;
-								-r | --repo) repo="${val:?"Option \"${arg}\" requires an argument."}" && shift ;;
-								-t | --token) token="${val:?"Option \"${arg}\" requires an argument."}" && shift ;;
-								-O | --output) path_output_directory="${val:?"Option \"${arg}\" requires an argument."}" && shift ;;
-								*) throw_error "Unknown option \"${arg}\"" ;;
-								esac
-							done
-						}
-					}
-
-					{ #utilities
-						run_get_github_repo() {
-							{ #utilities
-								ggr__git_clone_repo() {
+								dp__get_repo() {
 									printf "\e[2;96m"
 
-									git clone "${ggr__url}" "${path_output_directory}"
+									git clone "${dp__url}" "${dp__path_download_project_directory}" 2>&1
 
-									if [[ -f "${path_output_directory}/${repo}.sh" ]]; then
-										pushd "${path_output_directory}" &>/dev/null || throw_error "Failed to pushd"
+									dp__list_content_download_project_directory
 
-										printf "\n"
+									printf "\e[0m"
+								}
 
-										pwd
-										ls -hasl
-										chmod +x "${path_output_directory}/${repo}.sh"
+								dp__print_debug() {
+									if ((git)); then
+										pgp__print_log_line -l "GET GIT" -r "${dp__repo//-/ }"
+									else
+										pgp__print_log_line -l "GET" -r "${dp__repo//-/ }"
+									fi
 
-										printf "\n\n"
+									printf "           \e[2;96m%s \e[93m\"%s\"\e[0m\n" \
+										"Owner:     " "${dp__owner}" \
+										"Repo:      " "${dp__repo}" \
+										"Directory: " "${dp__path_download_project_directory}"
 
-										popd &>/dev/null || throw_error "Failed to popd"
+									[[ -z "${pgp__token}" ]] && printf "\n\n" && return 0
+
+									printf "           \e[2;96m%s \e[93m\"%s\"\e[0m\n" \
+										"Token:     " "${pgp__token::8}****************"
+
+									printf "\n\n"
+								}
+
+								dp__check_download_project_directory() {
+									if [[ -d "${dp__path_download_project_directory}" ]]; then
+										pgp__print_confirm \
+											--label "Directory already exists: "$'\e[1;91m'"\"${dp__path_download_project_directory}\"" \
+											--question "Do you want to remove the directory and continue?" \
+											--default-yes || throw_error "Directory already exists: \"${dp__path_download_project_directory}\""
+
+										rm -fr "${dp__path_download_project_directory}"
+										mkdir -p "${dp__path_download_project_directory}"
+									else
+										mkdir -p "${dp__path_download_project_directory}"
+									fi
+								}
+
+								dp__list_content_download_project_directory() {
+									[[ -f "${dp__path_download_project_directory}/${dp__repo}.sh" ]] &&
+										chmod +x "${dp__path_download_project_directory}/${dp__repo}.sh"
+
+									du -hs "${dp__path_download_project_directory}" && printf "\e[0m\n"
+
+									if type tree &>/dev/null; then
+										tree -hI ".git" --du --dirsfirst "${dp__path_download_project_directory}"
+									else
+										ls -hasl --color "${dp__path_download_project_directory}"
+									fi
+
+									printf "\e[0m\n\n"
+								}
+
+								:
+
+								set_dp__url() {
+									if ((git)) && [[ -n "${pgp__token}" ]]; then
+										printf -v "dp__url" "https://%s@%s/%s/%s.%s" \
+											"${pgp__token}" \
+											"github.com" \
+											"${dp__owner}" \
+											"${dp__repo}" \
+											"git"
+									elif ((ssh)); then
+										printf -v "dp__url" "git@%s:%s/%s.git" \
+											"github.com" \
+											"${dp__owner}" \
+											"${dp__repo}"
+									else
+										printf -v "dp__url" "https://%s/%s/%s/%s" \
+											"api.github.com/repos" \
+											"${dp__owner}" \
+											"${dp__repo}" \
+											"tarball"
+									fi
+								}
+							}
+
+							{ #utilities
+								dp__run_download_project() {
+									dp__print_debug
+
+									dp__check_download_project_directory
+
+									if ((ssh || git)); then
+										dp__get_repo
+									else
+										dp__get_tarball
 									fi
 								}
 							}
 
 							{ #variables
 								declare \
-									ggr__url="${ggr__url:+}"
+									dp__url="${dp__url:+}" \
+									dp__path_download_project_directory="${dp__path_download_project_directory:+}"
 							}
 
 							{ #setting-variables
-								[[ -d "${path_output_directory}" ]] || mkdir -p "${path_output_directory}"
+								set_dp__url
 
-								{ # ggr__url
-									printf -v "ggr__url" "https://%s@%s/%s/%s.%s" \
-										"${token}" \
-										"github.com" \
-										"${owner}" \
-										"${repo}" \
-										"git"
+								dp__path_download_project_directory="${dp__path_output_directory}/${dp__repo}"
+
+								{ #debug
+									: || printf "\e[92m%s\n" \
+										$'\n' \
+										$'\e[2;92m[DEBUG]\e[0;92m '"${FUNCNAME[0]^}()" \
+										$'' \
+										"    dp__url:                                  \"${dp__url}\"" \
+										"    dp__path_download_project_directory:      \"${dp__path_download_project_directory}\"" \
+										$'\e[0m'
 								}
 							}
 
 							:
 
-							ggr__git_clone_repo
+							dp__run_download_project
 						}
 					}
 
 					{ #variables
 						declare \
-							owner="${owner:+}" \
-							repo="${repo:+}" \
-							token="${token:+}" \
-							path_output_directory="${path_output_directory:+}"
+							dp__owner="${dp__owner:+}" \
+							dp__repo="${dp__repo:+}" \
+							dp__path_output_directory="${dp__path_output_directory:+}"
 					}
 
 					{ #setting-variables
 						config_parse_args "${@}"
 
-						type git &>/dev/null || throw_error "command \"git\" is required"
+						[[ -n "${dp__owner}" ]] || throw_error "option \"--owner\" is required"
+						[[ -n "${dp__repo}" ]] || throw_error "option \"--repo\" is required"
+						[[ -n "${dp__path_output_directory}" ]] || throw_error "option \"--output\" is required"
 
-						[[ -n "${owner}" ]] || throw_error "option \"--owner\" is required"
-						[[ -n "${repo}" ]] || throw_error "option \"--repo\" is required"
-						[[ -n "${path_output_directory}" ]] || throw_error "option \"--output\" is required"
-
-						: || { # debug
-							printf "\e[92m%s\n" \
-								$'\n\n' \
+						{ #debug
+							: || printf "\e[92m%s\n" \
+								$'\n' \
 								$'\e[2;92m[DEBUG]\e[0;92m '"${FUNCNAME[0]^}()" \
-								"    owner:      \"${owner}\"" \
-								"    repo:       \"${repo}\"" \
-								"    token:      \"${token}\"" \
-								"    output:     \"${path_output_directory}\"" \
+								$'' \
+								"    dp__owner:                     \"${dp__owner}\"" \
+								"    dp__repo:                      \"${dp__repo}\"" \
+								"    dp__path_output_directory:     \"${dp__path_output_directory}\"" \
 								$'\e[0m'
 						}
 					}
 
 					:
 
-					run_get_github_repo
+					dp__download_project
 				}
 
-				print_input() {
+				pgp__check_core_lib_exists_or_download() {
+					[[ -f "${pgp__path_core_default_directory}/bash-core-library/bash-core-library.sh" ]] && return 0
+
+					(
+						all=0
+						list=0
+						install=0
+						generate_dotenv=0
+						no_interactive=1
+
+						if [[ -n "${token}" ]]; then
+							pgp__token="${token}"
+							git=0
+							ssh=0
+						fi
+
+						pgp__download_project \
+							--owner "psy-projects-bash" \
+							--repo "bash-core-library" \
+							--output "${pgp__path_core_default_directory}" >/dev/null ||
+							throw_error "Failed to download \"bash-core-library\""
+					) &
+
+					sleep 1
+				}
+
+				pgp__check_generate_dotenv_file() {
+					{ #helpers
+						pgp__generate_dotenv_file() {
+							pushd "${pgp__project_main_script_directory}" >/dev/null || throw_error "Failed to change directory to \"${pgp__project_main_script_directory}\""
+
+							if [[ -n "${token}" ]]; then
+								PSY_GITHUB_TOKEN="${token}" \
+									bash "${pgp__project_main_script_file}" --generate-dotenv
+							elif [[ -n "${pgp__token}" ]]; then
+								PSY_GITHUB_TOKEN="${pgp__token}" \
+									bash "${pgp__project_main_script_file}" --generate-dotenv
+							else
+								bash "${pgp__project_main_script_file}" --generate-dotenv
+							fi || throw_error "Failed to generate dotenv file"
+
+							popd >/dev/null || throw_error "Failed to change directory to previous"
+						}
+					}
+
+					{ #utilities
+						pgp__run_check_generate_dotenv_file() {
+							[[ -f "${pgp__project_main_script_file}" ]] || throw_error "File \"${pgp__project_main_script_file}\" not found."
+
+							((generate_dotenv)) && pgp__generate_dotenv_file && return 0
+
+							pgp__print_confirm \
+								--question "Do you want to generate dotenv file?" \
+								--default-yes || return 0
+
+							pgp__generate_dotenv_file
+						}
+					}
+
+					{ #variables
+						declare \
+							pgp__project_main_script_directory="${pgp__project_main_script_directory:+}" \
+							pgp__project_main_script_file="${pgp__project_main_script_file:+}"
+					}
+
+					{ #setting-variables
+						((no_interactive)) && ! ((generate_dotenv)) && return 0
+						[[ -n "${pgp__select_repo}" ]] || throw_error "{pgp__select_repo} is required."
+
+						pgp__project_main_script_directory="${pgp__path_psy_projects_directory}/${pgp__select_repo}"
+						pgp__project_main_script_file="${pgp__project_main_script_directory}/${pgp__select_repo}.sh"
+					}
+
+					:
+
+					pgp__run_check_generate_dotenv_file
+				}
+
+				pgp__check_install_project() {
+					{ #helpers
+						pgp__install_project() {
+							[[ -n "${pgp__root_password}" ]] || set_pgp__root_password
+
+							printf "%s\n" "${pgp__root_password}" |
+								sudo -S \
+									ln -sfv \
+									"${pgp__project_main_script_file}" \
+									"/usr/local/bin/${pgp__select_repo}"
+
+							printf "\n\n"
+						}
+					}
+
+					{ #utilities
+						pgp__run_install_project() {
+							[[ -f "${pgp__project_main_script_file}" ]] || throw_error "File \"${pgp__project_main_script_file}\" not found."
+
+							[[ "${pgp__select_repo}" == "bash-core-library" ]] && return 0
+
+							((install)) && pgp__install_project && return 0
+
+							((no_interactive)) && return 0
+
+							pgp__print_confirm \
+								--default-yes \
+								--question "Do you want to install \"${pgp__select_repo}\"?" || return 0
+
+							pgp__install_project
+						}
+					}
+
+					{ #variables
+						declare \
+							pgp__project_main_script_directory="${pgp__project_main_script_directory:+}" \
+							pgp__project_main_script_file="${pgp__project_main_script_file:+}"
+					}
+
+					{ #setting-variables
+						[[ -n "${pgp__select_repo}" ]] || throw_error "{pgp__select_repo} is required."
+
+						pgp__project_main_script_directory="${pgp__path_psy_projects_directory}/${pgp__select_repo}"
+						pgp__project_main_script_file="${pgp__project_main_script_directory}/${pgp__select_repo}.sh"
+					}
+
+					:
+
+					pgp__run_install_project
+				}
+
+				:
+
+				pgp__print_input() {
 					{ #helpers
 						_help() {
 							cat <<-EOF
-								$(printf "\e[1;93m%s\e[0m" "Print_input")
+								$(printf "\e[1;93m%s\e[0m" "pgp__Print_input")
 
 								$(printf "\e[1;4;93m%s\e[0m" "Usage:")
-								  print_input [--options]
+								  pgp__print_input [--options]
 
 								$(printf "\e[1;4;93m%s\e[0m" "Options:")
 								  -h, --help            <boolean?>      Display this help information.
@@ -433,9 +569,9 @@ function psy_get_projects() {
 								  -T, --placeholder     <string?>       Set Placeholder value.
 
 								$(printf "\e[1;4;93m%s\e[0m" "Examples:")
-								  print_input -l "Login" -P "Username: " -T "Enter your username" -o "username_variable"
+								  pgp__print_input -l "Login" -P "Username: " -T "Enter your username" -o "username_variable"
 
-								  print_input \ 
+								  pgp__print_input \ 
 								    --label "Login" \ 
 								    --prompt "Username" \ 
 								    --placeholder "Enter your username" \ 
@@ -453,11 +589,11 @@ function psy_get_projects() {
 
 								case "${arg}" in
 								-h | --help) _help ;;
-								-o | --var-output) name_variable_output="${val:?"Option \"${arg}\" requires an argument."}" && shift ;;
-								-l | --label) label="${val:?"Option \"${arg}\" requires an argument."}" && shift ;;
-								-p | --password) mode_password="1" ;;
-								-P | --prompt) prompt="${val:?"Option \"${arg}\" requires an argument."}" && shift ;;
-								-T | --placeholder) placeholder="${val:?"Option \"${arg}\" requires an argument."}" && shift ;;
+								-p | --password) pi__mode_password="1" ;;
+								-l | --label) pi__label="${val:?$'\n'"$(throw_error "Option \"${arg}\" requires an argument.")"}" && shift ;;
+								-o | --var-output) pi__name_variable_output="${val:?$'\n'"$(throw_error "Option \"${arg}\" requires an argument.")"}" && shift ;;
+								-P | --prompt) pi__prompt="${val:?$'\n'"$(throw_error "Option \"${arg}\" requires an argument.")"}" && shift ;;
+								-T | --placeholder) pi__placeholder="${val:?$'\n'"$(throw_error "Option \"${arg}\" requires an argument.")"}" && shift ;;
 								*) throw_error "Unknown option \"${arg}\"" ;;
 								esac
 							done
@@ -476,9 +612,12 @@ function psy_get_projects() {
 										read -rsn1 -t 0.0001 k1
 										read -rsn1 -t 0.0001 k2
 										read -rsn1 -t 0.0001 k3
+
 										pi__character+="${k1}${k2}${k3}"
 
-										[[ -z "${pi__character}" ]] && printf "\e[2K\e[1A\e[2K\e[1A\e[2K\e[0G" && break
+										[[ -z "${pi__character}" ]] &&
+											printf "\e[2K\e[1A\e[2K\e[1A\e[2K\e[0G" &&
+											break
 
 										case "${pi__character}" in
 										$'\x7f') # backspace
@@ -486,8 +625,8 @@ function psy_get_projects() {
 												pi__input_line="${pi__input_line%?}"
 												printf "\b \b"
 
-												[[ -z "${pi__input_line}" ]] &&
-													printf "%s" "${pi__placeholder}"
+												[[ -n "${pi__input_line}" ]] ||
+													printf "%s" "${pi__format_placeholder}"
 											}
 											;;
 										$'\x0a') : ;;             # enter/return
@@ -502,13 +641,13 @@ function psy_get_projects() {
 										$'\x1b\x5b\x35\x7e') : ;; # page up
 										$'\x1b\x5b\x36\x7e') : ;; # page down
 										*)
-											[[ -z "${pi__input_line}" ]] &&
+											[[ -n "${pi__input_line}" ]] ||
 												printf "%s\e[%sD" \
-													"${pi__filler_placeholder}" "${#placeholder}"
+													"${pi__filler_placeholder}" "${#pi__format_placeholder}"
 
 											pi__input_line+="${pi__character}"
 
-											if ((mode_password)); then
+											if ((pi__mode_password)); then
 												printf "*"
 											else
 												printf "%s" "${pi__character}"
@@ -520,31 +659,31 @@ function psy_get_projects() {
 							}
 
 							{ #utilities
-								pi__build_input_line() {
+								pi__run_print_input() {
 									((no_interactive)) && return 0
 
-									[[ -n "${label}" ]] && printf "%s\n" "${pi__label}"
-									[[ -n "${prompt}" ]] && printf "%s" "${pi__prompt}"
-									[[ -n "${placeholder}" ]] && printf "%s" "${pi__placeholder}"
+									[[ -n "${pi__label}" ]] && printf "%s\n" "${pi__format_label}"
+									[[ -n "${pi__prompt}" ]] && printf "%s" "${pi__format_prompt}"
+									[[ -n "${pi__placeholder}" ]] && printf "%s" "${pi__format_placeholder}"
 
-									pi__get_input_from_stdin
+									pi__get_input_from_stdin || :
 
-									if [[ -n "${name_variable_output}" ]]; then
-										declare -n pi__output="${name_variable_output}"
-										[[ -n "${pi__input_line}" ]] &&
-											pi__output="${pi__input_line}"
+									if [[ -n "${pi__name_variable_output}" ]]; then
+										declare -n pi__output="${pi__name_variable_output}"
+										[[ -n "${pi__input_line}" ]] && pi__output="${pi__input_line}"
 									else
-										[[ -n "${pi__input_line}" ]] &&
-											printf "%s\n\n" "${pi__input_line}"
+										[[ -n "${pi__input_line}" ]] && printf "%s\n\n" "${pi__input_line}"
 									fi
 								}
 							}
 
 							{ #variables
 								declare \
-									pi__label="${pi__label:+}" \
-									pi__prompt="${pi__prompt:+}" \
-									pi__placeholder="${pi__placeholder:+}" \
+									pi__format_label="${pi__format_label:+}" \
+									pi__format_prompt="${pi__format_prompt:+}" \
+									pi__format_placeholder="${pi__format_placeholder:+}"
+
+								declare \
 									pi__input_line="${pi__input_line:+}" \
 									pi__character="${pi__character:+}" \
 									pi__output="${pi__output:+}"
@@ -552,57 +691,58 @@ function psy_get_projects() {
 
 							{ #setting-variables
 
-								{ # pi__label
-									printf -v pi__label "\n\t\e[92m%-10s \e[0m" \
-										"${label^}"
+								{ # pi__format_label
+									printf -v "pi__format_label" "%s%s" \
+										$'\e[7;5;48;5;15;38;5;2m'" INPUT "$'\e[0m' \
+										$'\e[48;5;233;38;5;34m'" ⚡ ${pi__label^}"$'\e[K\e[0m'
 								}
 
-								{ # pi__prompt
-									printf -v pi__prompt "\n\t\e[96m%-10s : \e[0m" \
-										"${prompt^}"
+								{ # pi__format_prompt
+									printf -v pi__format_prompt "%-22s" \
+										$'\e[1;96m'"┊┊┊┊┊┊┊" \
+										$'\n\e[1;96m'"░░░░░░░ ✎  " \
+										$'\e[38;5;33m'"${pi__prompt^}: "$'\e[0m'
 								}
 
-								{ # update placeholder
-									if [[ -n "${name_variable_output}" ]]; then
-										declare -n pi__output="${name_variable_output}"
+								{ # pi__format_placeholder
+									if [[ -n "${pi__name_variable_output}" ]]; then
+										declare -n pi__output="${pi__name_variable_output}"
 
 										[[ -n "${pi__output}" ]] && {
-											placeholder="${pi__output}"
+											pi__placeholder="${pi__output}"
 										}
 									fi
-								}
 
-								{ # pi__placeholder
-									printf -v pi__placeholder "\e[38;5;236m%s\e[0m\e[%sD" \
-										"${placeholder}" "${#placeholder}"
+									printf -v pi__format_placeholder "\e[38;5;236m%s\e[0m\e[%sD" \
+										"${pi__placeholder}" "${#pi__placeholder}"
 								}
 
 								{ # pi__filler_placeholder
-									printf -v pi__filler_placeholder "%${#placeholder}s" " "
+									printf -v pi__filler_placeholder "%${#pi__format_placeholder}s" " "
 								}
 							}
 
 							:
 
-							pi__build_input_line
+							pi__run_print_input
 						}
 					}
 
 					{ #variables
-						declare -i mode_password="${mode_password:+0}"
+						declare -i pi__mode_password="${pi__mode_password:+0}"
 
 						declare \
-							name_variable_output="${name_variable_output:+}" \
-							label="${label:+}" \
-							prompt="${prompt:+}" \
-							placeholder="${placeholder:+}"
+							pi__name_variable_output="${pi__name_variable_output:+}" \
+							pi__label="${pi__label:+}" \
+							pi__prompt="${pi__prompt:+}" \
+							pi__placeholder="${pi__placeholder:+}"
 					}
 
 					{ #setting-variables
 						config_parse_args "${@}"
 
 						{ # options
-							[[ -n "${placeholder}" ]] || placeholder="Type text..."
+							[[ -n "${pi__placeholder}" ]] || pi__placeholder="Type text..."
 						}
 					}
 
@@ -611,14 +751,14 @@ function psy_get_projects() {
 					pi__print_input
 				}
 
-				print_confirm() {
+				pgp__print_confirm() {
 					{ #helpers
 						_help() {
 							cat <<-EOF
-								$(printf "\e[1m%s\e[0m" "Print::Print_confirm")
+								$(printf "\e[1m%s\e[0m" "pgp__print_confirm")
 
 								$(printf "\e[1;4m%s\e[0m" "Usage:")
-								  print_confirm [--options]
+								  pgp__print_confirm [--options]
 
 								$(printf "\e[1;4m%s\e[0m" "Options:")
 								  -h, --help           <boolean?>      Display this help information.
@@ -629,9 +769,9 @@ function psy_get_projects() {
 								  -D, --default-off    <boolean?>      Disable Default value.
 
 								$(printf "\e[1;4m%s\e[0m" "Examples:")
-								  print_confirm -l "Label" -q "do you want to continue?" -Y
+								  pgp__print_confirm -l "Label" -q "do you want to continue?" -Y
 
-								  print_confirm \ 
+								  pgp__print_confirm \ 
 								    --label "Label" \ 
 								    --question "do you want to continue?" \ 
 								    --default-yes
@@ -649,11 +789,11 @@ function psy_get_projects() {
 
 								case "${arg}" in
 								-h | --help) _help ;;
-								-l | --label) label="${val:?"Option \"${arg}\" requires an argument."}" && shift ;;
-								-q | --question) question="${val:?"Option \"${arg}\" requires an argument."}" && shift ;;
-								-Y | --default-yes) default_yes="1" ;;
-								-N | --default-no) default_no="1" ;;
-								-D | --default-off) default_off="1" ;;
+								-l | --label) pc__label="${val:?$'\n'"$(throw_error "Option \"${arg}\" requires an argument.")"}" && shift ;;
+								-q | --question) pc__question="${val:?$'\n'"$(throw_error "Option \"${arg}\" requires an argument.")"}" && shift ;;
+								-Y | --default-yes) pc__default_yes="1" ;;
+								-N | --default-no) pc__default_no="1" ;;
+								-D | --default-off) pc__default_off="1" ;;
 								*) throw_error "Unknown option \"${arg}\"" ;;
 								esac
 							done
@@ -662,7 +802,7 @@ function psy_get_projects() {
 
 					{ #utilities
 						pc__print_confirm() {
-							{ #utilities
+							{ #helpers
 								pc__print_question_interactive() {
 									((no_interactive)) && return 0
 
@@ -671,12 +811,14 @@ function psy_get_projects() {
 									printf "\e7" # Save the current cursor position
 
 									while :; do
-										[[ -n "${label}" ]] && printf "%s\n" "${label}"
-
 										if ((pc__suggestion)); then
-											printf "%s\n" "${pc__suggestion_prompt}"
+											((pc__printed_suggestion)) || printf "%s\n" "${pc__suggestion_prompt}"
+
+											pc__printed_suggestion=1
 										else
-											printf "%s\n" "${pc__prompt}"
+											[[ -n "${pc__label}" ]] && printf "%s\n" "${pc__format_label}"
+
+											printf "%s\n" "${pc__format_prompt}"
 										fi
 
 										IFS= read -rsn1 pc__reply &>/dev/null
@@ -687,34 +829,37 @@ function psy_get_projects() {
 
 										pc__reply+="${k1}${k2}${k3}"
 
-										# read -r pc__reply </dev/tty
-
-										if [[ -z "${pc__reply}" ]]; then
-											pc__reply="${pc__default}"
-										fi
+										[[ -n "${pc__reply}" ]] || pc__reply="${pc__default}"
 
 										case "${pc__reply^^}" in
 										Y*) printf "\n" && return 0 ;;
 										N*) printf "\n" && return 1 ;;
-										*)
-											printf "\e8"
-											printf "\e[J"
-											pc__suggestion=1
-											;;
+										*) printf "\e8\e[J" && pc__suggestion=1 ;;
 										esac
 									done
 								}
 							}
 
+							{ #utiltiies
+								pc__run_print_confirm() {
+									pc__print_question_interactive
+								}
+							}
+
 							{ #variables
 								declare -i \
-									pc__suggestion="${pc__suggestion:+0}"
+									pc__suggestion="${pc__suggestion:+0}" \
+									pc__printed_suggestion="${pc__printed_suggestion:+0}"
+
+								declare \
+									pc__format_label="${pc__format_label:+}" \
+									pc__format_prompt="${pc__format_prompt:+}"
 
 								declare \
 									pc__default="${pc__default:+}" \
+									pc__yn_choice="${pc__yn_choice:+}" \
 									pc__prompt="${pc__prompt:+}" \
 									pc__suggestion_prompt="${pc__suggestion_prompt:+}" \
-									pc__is_dry_run_prefix="${pc__is_dry_run_prefix:+}" \
 									pc__current_cursor_position="${pc__current_cursor_position:+}" \
 									pc__reply="${pc__reply:+}"
 							}
@@ -723,73 +868,75 @@ function psy_get_projects() {
 
 								{ # pc__default
 									pc__default="off"
-									((default_yes)) && pc__default="Y"
-									((default_no)) && pc__default="N"
-									((default_off)) && pc__default="off"
+									((pc__default_yes)) && pc__default="Y"
+									((pc__default_no)) && pc__default="N"
+									((pc__default_off)) && pc__default="off"
+								}
+
+								{ # pc__yn_choice
+									case "${pc__default}" in
+									"Y") pc__yn_choice="Y/n" ;;
+									"N") pc__yn_choice="y/N" ;;
+									"off") pc__yn_choice="y/n" ;;
+									esac
 								}
 
 								{ # pc__prompt
-									case "${pc__default}" in
-									"Y")
-										pc__prompt="Y/n"
-										;;
-									"N")
-										pc__prompt="y/N"
-										;;
-									"off")
-										pc__prompt="y/n"
-										;;
-									esac
-
-									printf -v "pc__prompt" "%s  [ %s ]" "${question}" "${pc__prompt}"
+									printf -v "pc__prompt" "%s  [ %s ]" \
+										"${pc__question}" "${pc__yn_choice}"
 								}
 
-								{ # pc__is_dry_run_prefix
-									if ((dry_run)); then
-										pc__is_dry_run_prefix="[Dry-Run]-"
+								{ # pc__format_label
+									printf -v "pc__format_label" "%s%s" \
+										$'\e[7;5;48;5;234;38;5;226m'" WARNING "$'\e[0m' \
+										$'\e[48;5;233;38;5;34m'" ❗ ${pc__label^}"$'\e[K\e[0m'
+								}
 
-										printf -v "label" "%s" "${pc__is_dry_run_prefix}${label}"
+								{ # pc__format_prompt
+									if [[ -n "${pc__label}" ]]; then
+										printf -v "pc__format_prompt" "%s" \
+											$'\e[1;38;5;118m'"┊┊┊┊┊┊┊┊┊"$'\n'"░░░░░░░░░" \
+											$'\e[1;38;5;226m'" ⚡ ${pc__prompt} "$'\e[0m'
 									else
-										pc__is_dry_run_prefix=""
+										printf -v "pc__format_prompt" "%s" \
+											$'\e[1;38;5;226m'" ⚡ ${pc__prompt} "$'\e[0m'
 									fi
 								}
 
 								{ # pc__suggestion_prompt
-									printf -v "pc__suggestion_prompt" "%s" "Please answer Yes or No."
-									printf -v "pc__suggestion_prompt" "%s\n\n%s" "${pc__prompt}" "${pc__suggestion_prompt}"
+									printf -v "pc__suggestion_prompt" "%s" \
+										$'\e[7;5;48;5;15;38;5;124m'" Enter 'Y' or 'N' (yes / no). "$'\e[0m'
 								}
 							}
 
 							:
 
-							pc__print_question_interactive
+							pc__run_print_confirm
 						}
 					}
 
 					{ #variables
 						declare -i \
-							dry_run="${dry_run:-0}" \
-							force="${force:-0}" \
-							default_yes="${default_yes:+0}" \
-							default_no="${default_no:+0}" \
-							default_off="${default_off:+0}"
+							pc__default_yes="${pc__default_yes:+0}" \
+							pc__default_no="${pc__default_no:+0}" \
+							pc__default_off="${pc__default_off:+0}"
 
 						declare \
-							label="${label:+}" \
-							question="${question:+}"
+							pc__label="${pc__label:+}" \
+							pc__question="${pc__question:+}"
 					}
 
 					{ #setting-variables
 						config_parse_args "${@}"
 
-						{ # options
-							[[ -n "${question}" ]] || question="do you want to continue?"
+						{ #options
+							[[ -n "${pc__question}" ]] || pc__question="do you want to continue?"
 
-							((default_yes)) || default_yes="1"
+							((pc__default_yes)) || pc__default_yes="1"
 
-							((default_no)) && default_yes=0
-							((default_yes)) && default_no=0
-							((default_off)) && default_yes=0
+							((pc__default_no)) && pc__default_yes=0
+							((pc__default_yes)) && pc__default_no=0
+							((pc__default_off)) && pc__default_yes=0
 						}
 					}
 
@@ -800,9 +947,81 @@ function psy_get_projects() {
 					pc__print_confirm
 				}
 
-				:
+				pgp__print_log_line() {
+					{ #helpers
+						_help() {
+							cat <<-EOF
+								$(printf "\e[1m%s\e[0m" "pgp__print_log_line")
 
-				normalize_path() {
+								$(printf "\e[1;4m%s\e[0m" "Usage:")
+								  pgp__print_log_line [--options]
+
+								$(printf "\e[1;4m%s\e[0m" "Options:")
+								  -h, --help          <boolean?>      Display this help information.
+								  -l, --left-text     <string>        Set Left-Text value.
+								  -r, --right-text    <string>        Set Right-Text value.
+
+								$(printf "\e[1;4m%s\e[0m" "Examples:")
+								  pgp__print_log_line -l "Downloading" -r "bash-project"
+
+								  pgp__print_log_line \ 
+								    --left-text "Downloading" \ 
+								    --right-text "bash-project"
+
+							EOF
+
+							exit 0
+						}
+
+						config_parse_args() {
+							((${#})) || _help
+
+							while ((${#})); do
+								arg="${1:-}" val="${2:-}" && shift
+
+								case "${arg}" in
+								-h | --help) _help ;;
+								-l | --left-text) pll__left_text="${val:?$'\n'"$(throw_error "Option \"${arg}\" requires an argument.")"}" && shift ;;
+								-r | --right-text) pll__right_text="${val:?$'\n'"$(throw_error "Option \"${arg}\" requires an argument.")"}" && shift ;;
+								*) throw_error "Unknown option \"${arg}\"" ;;
+								esac
+							done
+						}
+					}
+
+					{ #utilities
+						pll__print_log_line() {
+							: $((COLUMNS - ${#pll__left_text} - ${#pll__right_text} - 30))
+							printf -v "pll__filler_text_line" "%${_}s"
+
+							printf "    %s %s %s\n" \
+								$'\e[48;5;233;38;5;88m'"  [    ${pll__left_text}    ]  "$'\e[0m' \
+								$'\e[38;5;236m'"${pll__filler_text_line// /─}"$'\e[0m' \
+								$'\e[48;5;233;38;5;226m'"  \"${pll__right_text^}\"  "$'\e[0m'
+						}
+					}
+
+					{ #variables
+						declare \
+							pll__left_text="${pll__left_text:+}" \
+							pll__right_text="${pll__right_text:+}"
+
+						declare pll__filler_text_line="${pll__filler_text_line:+}"
+					}
+
+					{ #setting-variables
+						config_parse_args "${@}"
+
+						[[ -n "${pll__left_text}" ]] || throw_error "Option \"--left-text\" is required."
+						[[ -n "${pll__right_text}" ]] || throw_error "Option \"--right-text\" is required."
+					}
+
+					:
+
+					pll__print_log_line
+				}
+
+				pgp__normalize_path() {
 					declare \
 						np__arg_path="${1}" \
 						np__path_output="${np__path_output:+}"
@@ -812,29 +1031,29 @@ function psy_get_projects() {
 							: "${PWD%/*}"
 							: "${_%/*}"
 							np__path_output="${_%/*}/${np__arg_path:9}"
-							return
+							return 0
 						}
 
 						[[ "${np__arg_path:0:6}" == "../../" ]] && {
 							: "${PWD%/*}"
 							np__path_output="${_%/*}/${np__arg_path:6}"
-							return
+							return 0
 						}
 
 						[[ "${np__arg_path:0:3}" == "../" ]] && {
 							np__path_output="${PWD%/*}/${np__arg_path:3}"
-							return
+							return 0
 						}
 
-						[[ "${np__arg_path:0:1}" == "~" ]] && np__path_output="${np__arg_path/\~/${HOME}}" && return
+						[[ "${np__arg_path:0:1}" == "~" ]] && np__path_output="${np__arg_path/\~/${HOME}}" && return 0
 
-						[[ "${np__arg_path}" =~ ^\.[^/] ]] && np__path_output="${PWD}/${np__arg_path}" && return
+						[[ "${np__arg_path}" =~ ^\.[^/] ]] && np__path_output="${PWD}/${np__arg_path}" && return 0
 
-						[[ "${np__arg_path:0:1}" == "." ]] && np__path_output="${np__arg_path/\./${PWD}}" && return
+						[[ "${np__arg_path:0:1}" == "." ]] && np__path_output="${np__arg_path/\./${PWD}}" && return 0
 
-						[[ "${np__arg_path:0:1}" != "/" ]] && np__path_output="${PWD}/${np__arg_path}" && return
+						[[ "${np__arg_path:0:1}" != "/" ]] && np__path_output="${PWD}/${np__arg_path}" && return 0
 
-						[[ "${np__arg_path:0:1}" == "/" ]] && np__path_output="${np__arg_path}" && return
+						[[ "${np__arg_path:0:1}" == "/" ]] && np__path_output="${np__arg_path}" && return 0
 					}
 
 					np__normalize_path
@@ -842,26 +1061,24 @@ function psy_get_projects() {
 					printf "%s\n" "${np__path_output}"
 				}
 
-				check_element_in_index_array() {
+				pgp__validate_project() {
 					{ #helpers
 						_help() {
 							cat <<-EOF
-								array_utilities::check_element_in_index_array
+								$(printf "\e[1m%s\e[0m" "pgp__validate_project")
 
-								Usage:
-								  check_element_in_index_array [--options]
+								$(printf "\e[1;4m%s\e[0m" "Usage:")
+								  pgp__validate_project [--options]
 
-								Options:
-								  -h, --help                      Display this help information.
-								  -n, --name <string>             Set index array name.
-								  -e, --element <string>          Set array element to check.
+								$(printf "\e[1;4m%s\e[0m" "Options:")
+								  -h, --help       <boolean?>      Display this help information.
+								  -p, --project    <string>        Set Project value.
 
-								Examples:
-								  check_element_in_index_array -n "index_array_name" -e "item"
+								$(printf "\e[1;4m%s\e[0m" "Examples:")
+								  pgp__validate_project -p "bash-project"
 
-								  check_element_in_index_array \ 
-								    --name "index_array_name" \ 
-								    --element "item"
+								  pgp__validate_project \ 
+								    --project "bash-project"
 
 							EOF
 
@@ -869,407 +1086,264 @@ function psy_get_projects() {
 						}
 
 						config_parse_args() {
-							while getopts ":-:he:n:" opt; do
-								case "${opt}" in
-								h) _help ;;
-								n) name_iarr_variable="${OPTARG}" ;;
-								e) arg_element="${OPTARG}" ;;
-								-)
-									case "${OPTARG}" in
-									help) _help ;;
-									name) name_iarr_variable="${!OPTIND:?"Option \"--${OPTARG}\" requires an argument."}" && ((OPTIND++)) ;;
-									element) arg_element="${!OPTIND:?"Option \"--${OPTARG}\" requires an argument."}" && ((OPTIND++)) ;;
-									*) throw_error "Unknown long option: \"--${OPTARG}\"" ;;
-									esac
-									;;
-								:) throw_error "Option \"-${OPTARG:-}\" requires an argument." ;;
-								?) throw_error "Invalid option \"-${OPTARG:-}\"" ;;
-								*) throw_error "Unknown option \"-${OPTARG:-}\"" ;;
+							((${#})) || _help
+
+							while ((${#})); do
+								arg="${1:-}" val="${2:-}" && shift
+
+								case "${arg}" in
+								-h | --help) _help ;;
+								-p | --project) vp__project="${val:?$'\n'"$(throw_error "Option \"${arg}\" requires an argument.")"}" && shift ;;
+								*) throw_error "Unknown option \"${arg}\"" ;;
 								esac
 							done
-							shift "$((OPTIND - 1))"
+						}
+					}
 
-							if
-								[[ -z "${name_iarr_variable}" ]] ||
-									[[ -z "${arg_element}" ]]
-							then
-								_help
-							fi
+					{ #utilities
+						vp__validate_project() {
+							for vp__select_project in "${iarr_psy_projects[@]}"; do
+								[[ "${vp__select_project}" =~ ^"${vp__project}"$ ]] && return 0
+							done
+
+							throw_error "Project \"${vp__project}\" not found."
 						}
 					}
 
 					{ #variables
-						declare -i \
-							OPTIND="${OPTIND:+0}" \
-							tmp_index="${tmp_index:+0}"
-
 						declare \
-							name_iarr_variable="${name_iarr_variable:+}" \
-							arg_element="${arg_element:+}" \
-							ref_name_iarr_variable="${ref_name_iarr_variable:+}"
+							vp__project="${vp__project:+}" \
+							vp__select_project="${vp__select_project:+}"
 					}
 
 					{ #setting-variables
 						config_parse_args "${@}"
-
-						declare -n ref_name_iarr_variable="${name_iarr_variable}"
 					}
 
 					:
 
-					for tmp_index in "${!ref_name_iarr_variable[@]}"; do
-						[[ "${ref_name_iarr_variable[${tmp_index}]}" =~ ^"${arg_element}"$ ]] &&
-							return 0
+					vp__validate_project
+				}
+
+				:
+
+				set_pgp__project() {
+					((all)) && return 0
+					((list)) && return 0
+
+					if [[ -n "${project}" ]]; then
+						pgp__project="${project}"
+					else
+						pgp__print_input \
+							--label "Please enter the name of the project you would like to retrieve." \
+							--prompt "Project" \
+							--var-output "pgp__project"
+					fi
+
+					:
+
+					[[ -n "${pgp__project}" ]] || throw_error "Option \"--project\" is required."
+
+					for pgp__select_alias in "${!aarr_psy_projects_alias[@]}"; do
+						[[ "${aarr_psy_projects_alias[${pgp__select_alias}]}" == "${pgp__project}" ]] &&
+							pgp__project="${pgp__select_alias}" &&
+							break
 					done
 
-					return 1
+					pgp__validate_project -p "${pgp__project}"
 				}
 
-				print_log_line() {
-					declare \
-						pgp__arg_left_text="${1:?$'\e[91m[ARG]\e[0m' <Left_text> argument is required.}" \
-						pgp__arg_right_text="${2:?$'\e[91m[ARG]\e[0m' <Right_text> argument is required.}"
+				set_pgp__token() {
+					((list)) && return 0
+					((ssh)) && return 0
 
-					declare pgp__filler_text_line="${pgp__filler_text_line:+}"
+					if [[ -n "${token}" ]]; then
+						pgp__token="${token}"
+					elif [[ "${!PSY*}" ]]; then
+						: "${!PSY*}" && pgp__token="${!_}"
+					else
+						pgp__print_input \
+							--password \
+							--label "Please enter your GitHub Token." \
+							--prompt "Token" \
+							--placeholder "ghp_4CEGFCeycSecc23dasd32dfds5k" \
+							--var-output "pgp__token"
+					fi
 
 					:
 
-					: $((COLUMNS - ${#pgp__arg_left_text} - ${#pgp__arg_right_text} - 30))
-					printf -v "pgp__filler_text_line" "%${_}s"
+					[[ -n "${pgp__token}" ]] || throw_error "Option \"--token\" is required."
 
-					printf "    %s %s %s\n" \
-						$'\e[48;5;233;38;5;88m'"  [    ${pgp__arg_left_text}    ]  "$'\e[0m' \
-						$'\e[38;5;236m'"${pgp__filler_text_line// /─}"$'\e[0m' \
-						$'\e[48;5;233;38;5;226m'"  \"${pgp__arg_right_text^}\"  "$'\e[0m'
+					[[ "${pgp__token}" =~ ^ghp_[a-zA-Z0-9]+$ ]] || throw_error "Invalid GitHub Token"
 				}
 
-				check_core_lib_exists_or_download() {
-					[[ -f "${pgp__path_core_default_directory}/bash-core-library.sh" ]] || {
-						pgp__core_alias_directory=1
+				set_pgp__root_password() {
+					((list)) && return 0
+					((install)) || return 0
 
-						(
-							git=0 pgp__skip_install=1 \
-								pgp__download_projects \
-								"bash-core-library" \
-								"${aarr_pgp__psy_projects_repos["bash-core-library"]}" \
-								"${pgp__path_core_default_directory}" >/dev/null ||
-								throw_error "Failed to download \"bash-core-library\""
-						) &
+					printf "" | sudo -S cat /etc/shadow &>/dev/null && return 0
 
-						pgp__core_alias_directory=0
-					}
+					# shellcheck disable=SC2153
+					if [[ -n "${root_password}" ]]; then
+						pgp__root_password="${root_password}"
+					elif declare -p ROOT_PASSWORD &>/dev/null; then
+						pgp__root_password="${ROOT_PASSWORD}"
+					else
+						pgp__print_input \
+							--password \
+							--label "Please enter your Root Password" \
+							--prompt "Password" \
+							--placeholder "P4s5w0RD" \
+							--var-output "pgp__root_password"
+					fi
+
+					:
+
+					[[ -n "${pgp__root_password}" ]] || throw_error "Option \"--root-password\" is required."
+
+					printf "%s" "${pgp__root_password}" |
+						sudo -S cat /etc/shadow &>/dev/null ||
+						throw_error "Invalid Root Password"
 				}
 
-				check_generate_dotenv_file() {
-					{ #config
-						declare \
-							project_main_script_directory="${project_main_script_directory:+}" \
-							project_main_script_file="${project_main_script_file:+}"
+				set_pgp__ssh_key() {
+					((ssh)) || return 0
 
-						:
+					[[ -f "${pgp__path_ssh_key_file}" ]] && return 0
 
-						((no_interactive)) && ! ((generate_dotenv)) && return 0
-
-						project_main_script_directory="${pgp__path_psy_projects_directory}/${aarr_pgp__psy_projects_repos[${pgp__select_project}]}"
-						project_main_script_file="${project_main_script_directory}/${pgp__select_project}.sh"
-					}
-
-					[[ -f "${project_main_script_file}" ]] && {
-						((generate_dotenv)) && {
-							pushd "${project_main_script_directory}" >/dev/null || throw_error "Failed to change directory to \"${project_main_script_directory}\""
-
-							PSY_GITHUB_TOKEN="${token}" bash "${project_main_script_file}" --generate-dotenv ||
-								throw_error "Failed to generate dotenv file"
-
-							popd >/dev/null || throw_error "Failed to change directory to previous"
-
-							return
+					{ # check ssh config
+						[[ -d "${HOME}/.ssh" ]] || {
+							mkdir -p "${HOME}/.ssh"
+							chmod 700 "${HOME}/.ssh"
 						}
 
-						if
-							print_confirm \
-								--default-yes \
-								--question "Do you want to generate dotenv file?"
-						then
-							pushd "${project_main_script_directory}" >/dev/null || throw_error "Failed to change directory to \"${project_main_script_directory}\""
+						[[ -f "${HOME}/.ssh/config" ]] || {
+							: >"${HOME}/.ssh/config"
+							chmod 600 "${HOME}/.ssh/config"
+						}
 
-							PSY_GITHUB_TOKEN="${token}" bash "${project_main_script_file}" --generate-dotenv ||
-								throw_error "Failed to generate dotenv file"
+						if sed -n "\|Host github.com|Q 1" "${HOME}/.ssh/config"; then
+							cat <<-'EOF' >>"${HOME}/.ssh/config"
 
-							popd >/dev/null || throw_error "Failed to change directory to previous"
+								Host github.com
+								  HostName github.com
+								  User git
+								  IdentityFile ~/.ssh/psy_git
+
+							EOF
 						fi
 					}
-				}
 
-				pgp__check_root_password() {
-					printf "%s\n" "${root_password}" |
-						sudo -S cat /etc/shadow &>/dev/null || {
-						# shellcheck disable=SC2153
-						if [[ -n "${arg_root_password}" ]]; then
-							root_password="${arg_root_password}"
-						elif declare -p ROOT_PASSWORD &>/dev/null; then
-							root_password="${ROOT_PASSWORD}"
+					{ # get ssh key
+						if [[ -n "${ssh_key}" ]]; then
+							pgp__ssh_key="${ssh_key}"
 						else
-							print_input \
+							pgp__print_input \
 								--password \
-								--label "Please enter your Root Password" \
-								--prompt "Password" \
-								--placeholder "P4s5w0RD" \
-								--var-output "root_password"
+								--label "Please enter your "$'\e[4;1;96m'"ed25519"$'\e[0;48;5;233;38;5;34m'" SSH private key content." \
+								--prompt "SSH Key" \
+								--placeholder "b3BlbnNzaC1rZXktdjEAAAAABG5..." \
+								--var-output "pgp__ssh_key"
+						fi
+
+						if [[ -n "${pgp__ssh_key}" ]]; then
+							# shellcheck disable=SC2001
+							pgp__ssh_key="$(sed -E "s|.{70}|&\n|g" <<<"${pgp__ssh_key}")"
+
+							printf "%s\n" \
+								"-----BEGIN OPENSSH PRIVATE KEY-----" \
+								"${pgp__ssh_key}" \
+								"-----END OPENSSH PRIVATE KEY-----" >"${pgp__path_ssh_key_file}"
+
+							chmod 600 "${pgp__path_ssh_key_file}"
+						else
+							throw_error "Option \"--ssh-key\" is required."
 						fi
 					}
+
+					[[ -f "${pgp__path_ssh_key_file}" ]] || throw_error "SSH key \"psy_git\" not found"
 				}
 			}
 
 			{ #utilities
 				pgp__run_psy_get_projects() {
-					((list)) && pgp__print_all_projects && exit 0
+					((list)) && pgp__print_all_projects
 
-					check_core_lib_exists_or_download
+					printf "\n\n"
 
-					for pgp__select_project in "${iarr_pgp__download_projects[@]}"; do
-						{ # alias
-							case "${pgp__select_project}" in
-							"ved") pgp__select_project="virtual-env-docker" ;;
-							"core") pgp__select_project="bash-core-library" pgp__core_alias_directory=1 ;;
-							"") continue ;;
-							esac
+					pgp__check_core_lib_exists_or_download
 
-							check_element_in_index_array \
-								--name "iarr_pgp__psy_projects" \
-								--element "${pgp__select_project}" ||
-								throw_error "Project \"${pgp__select_project}\" not found."
-						}
+					for pgp__select_repo in "${iarr_pgp__download_projects[@]}"; do
+						pgp__select_owner="${aarr_psy_projects_owner[${pgp__select_repo}]:?}"
 
-						# project \ repo \ directory
-						pgp__download_projects \
-							"${pgp__select_project}" \
-							"${aarr_pgp__psy_projects_repos[${pgp__select_project}]}" \
-							"${pgp__path_psy_projects_directory}"
+						pgp__download_project \
+							--owner "${pgp__select_owner}" \
+							--repo "${pgp__select_repo}" \
+							--output "${pgp__path_psy_projects_directory}"
 
-						check_generate_dotenv_file
+						pgp__check_generate_dotenv_file
 
-						print_log_line "DONE" "${pgp__select_project//-/ }"
+						pgp__check_install_project
+
+						pgp__print_log_line -l "DONE" -r "${pgp__select_repo//-/ }"
 
 						printf "\n"
 					done
 
 					printf "\n\n"
 				}
-
-				:
-
-				pgp__print_debug() {
-					if ((git)); then
-						print_log_line "GET GIT" "${pgp__arg_project//-/ }"
-					else
-						print_log_line "GET" "${pgp__arg_project//-/ }"
-					fi
-
-					printf "           \e[2;96m%s \e[93m\"%s\"\e[0m\n" \
-						"Project:   " "${pgp__arg_project}" \
-						"Repo:      " "${pgp__arg_repo}" \
-						"Directory: " "${pgp__path_repo_installation_directory}" \
-						"Token:     " "${token::8}****************"
-
-					printf "\n\n"
-				}
-
-				pgp__install_project() {
-					((pgp__skip_install)) && return
-
-					printf "\n\n"
-
-					if ((install)); then
-						pgp__check_root_password
-
-						printf "%s\n" "${root_password}" |
-							sudo -S \
-								ln -sfv \
-								"${pgp__path_repo_installation_directory}/${pgp__arg_project}.sh" \
-								"/usr/local/bin/${pgp__arg_project}"
-					else
-						((no_interactive)) && return
-
-						if
-							print_confirm \
-								--default-yes \
-								--question "Do you want to install \"${pgp__arg_project}\"?"
-						then
-							pgp__check_root_password
-
-							printf "%s\n" "${root_password}" |
-								sudo -S \
-									ln -sfv \
-									"${pgp__path_repo_installation_directory}/${pgp__arg_project}.sh" \
-									"/usr/local/bin/${pgp__arg_project}"
-						else
-							return
-						fi
-					fi
-
-					printf "\n\n"
-				}
-
-				pgp__print_all_projects() {
-					printf "\n\e[2;4;92m%s\e[0m\n\n" "List all Psy-Projects and Repositories:"
-					for pgp__select_project in "${iarr_pgp__psy_projects[@]}"; do
-						printf "\e[96m%s \e[93m\"%s\"\e[0m\n" \
-							"Project: " "${pgp__select_project}" \
-							"Repo:    " "${aarr_pgp__psy_projects_repos[${pgp__select_project}]}"
-
-						{ # alias
-							case "${pgp__select_project}" in
-							"bash-core-library") printf "\e[96m%s \e[93m\"%s\"\e[0m\n" "Alias:   " "core" ;;
-							"virtual-env-docker") printf "\e[96m%s \e[93m\"%s\"\e[0m\n" "Alias:   " "ved" ;;
-							esac
-						}
-
-						printf "\n\n"
-					done
-
-					exit 0
-				}
-
-				pgp__download_projects() {
-					{ #config
-						declare \
-							pgp__arg_project="${1:?$'\e[91m[ARG]\e[0m' <Project> argument is required.}" \
-							pgp__arg_repo="${2:?$'\e[91m[ARG]\e[0m' <Repo> argument is required.}" \
-							pgp__arg_directory="${3:?$'\e[91m[ARG]\e[0m' <Directory> argument is required.}"
-
-						declare \
-							pgp__path_repo_installation_directory="${pgp__path_repo_installation_directory:+}"
-
-						:
-
-						pgp__path_repo_installation_directory="${pgp__arg_directory}/${pgp__arg_repo}"
-
-						((pgp__core_alias_directory)) && pgp__path_repo_installation_directory="${pgp__path_core_default_directory}"
-					}
-
-					:
-
-					pgp__print_debug
-
-					if ((git)); then
-						get_github_repo \
-							--owner "${pgp__arg_repo%/*}" \
-							--repo "${pgp__arg_project}" \
-							--token "${token}" \
-							--output "${pgp__path_repo_installation_directory}"
-					else
-						get_github_tarball \
-							--owner "${pgp__arg_repo%/*}" \
-							--repo "${pgp__arg_project}" \
-							--token "${token}" \
-							--output "${pgp__path_repo_installation_directory}"
-					fi
-
-					pgp__install_project
-
-					printf "\n\n"
-				}
 			}
 
 			{ #variables
-				unset -v \
-					iarr_pgp__psy_projects \
-					iarr_pgp__download_projects \
-					aarr_pgp__psy_projects_repos
-
-				declare -i \
-					pgp__core_alias_directory="${pgp__core_alias_directory:+0}" \
-					pgp__skip_install="${pgp__skip_install:+0}"
+				declare \
+					pgp__path_core_default_directory="${pgp__path_core_default_directory:+}" \
+					pgp__path_psy_projects_directory="${pgp__path_psy_projects_directory:+}" \
+					pgp__path_ssh_key_file="${pgp__path_ssh_key_file:+}" \
+					pgp__project="${pgp__project:+}" \
+					pgp__token="${pgp__token:+}" \
+					pgp__root_password="${pgp__root_password:+}" \
+					pgp__ssh_key="${pgp__ssh_key:+}"
 
 				declare \
-					pgp__path_psy_projects_directory="${pgp__path_psy_projects_directory:+}" \
-					pgp__path_core_default_directory="${pgp__path_core_default_directory:+}" \
-					pgp__select_project="${pgp__select_project:+}" \
+					pgp__select_alias="${pgp__select_alias:+}" \
+					pgp__select_owner="${pgp__select_owner:+}" \
 					pgp__select_repo="${pgp__select_repo:+}"
 
-				declare -a \
-					iarr_pgp__download_projects \
-					iarr_pgp__psy_projects
-
-				declare -A aarr_pgp__psy_projects_repos
+				declare -a iarr_pgp__download_projects
 			}
 
 			{ #setting-variables
-				pgp__path_psy_projects_directory="$(normalize_path "${directory}")"
-				pgp__path_core_default_directory="${HOME}/.cache/psy/bash-projects/lib/bash-core-library"
+				pgp__path_core_default_directory="${HOME}/.cache/psy/bash-projects/lib"
+				pgp__path_psy_projects_directory="$(pgp__normalize_path "${directory}")"
+				pgp__path_ssh_key_file="${HOME}/.ssh/psy_git"
 
-				{ # project
-					((all)) || {
-						! ((list)) &&
-							! ((all)) &&
-							[[ -z "${project}" ]] && {
-							print_input \
-								--label "Please enter the name of the project you would like to retrieve." \
-								--prompt "Project" \
-								--var-output "project"
-
-							[[ -z "${project}" ]] && throw_error "Option \"--project\" is required."
-						}
-
-						! ((list)) &&
-							[[ -z "${project}" ]] && throw_error "Option \"--project\" is required."
-					}
-				}
-
-				{ # token
-					((list)) || {
-						if [[ -n "${arg_git_token}" ]]; then
-							token="${arg_git_token}"
-						elif [[ "${!PSY*}" ]]; then
-							: "${!PSY*}" && token="${!_}"
-						else
-							print_input \
-								--password \
-								--label "Please enter your GitHub Token" \
-								--prompt "Token" \
-								--placeholder "ghp_4CEGFCeycSecc23dasd32dfds5k" \
-								--var-output "token"
-						fi
-
-						[[ -z "${token}" ]] && throw_error "Option \"--token\" is required."
-					}
-				}
-
-				{ # root_password
-					! ((list)) && ((install)) && pgp__check_root_password
-				}
-
-				{ # iarr_pgp__psy_projects
-					iarr_pgp__psy_projects=(
-						"bash-core-library"
-						"psy-bash-tools"
-						"psy-dev-utilities"
-						"bootstrap-ved"
-						"virtual-env-docker"
-						"psy-get-binaries"
-						"ga-utilities"
-					)
-				}
-
-				{ # aarr_pgp__psy_projects_repos
-					aarr_pgp__psy_projects_repos=(
-						["bash-core-library"]="psy-projects-bash/bash-core-library"
-						["psy-bash-tools"]="psy-projects-bash/psy-bash-tools"
-						["psy-dev-utilities"]="psy-projects-bash/psy-dev-utilities"
-						["bootstrap-ved"]="psy-projects-bash/bootstrap-ved"
-						["virtual-env-docker"]="psy-projects-docker/virtual-env-docker"
-						["psy-get-binaries"]="psy-projects-ga/psy-get-binaries"
-						["ga-utilities"]="psy-projects-ga/ga-utilities"
-					)
-				}
+				set_pgp__project
+				set_pgp__token
+				set_pgp__root_password
+				set_pgp__ssh_key
 
 				{ # iarr_pgp__download_projects
 					if ((all)); then
-						iarr_pgp__download_projects=("${iarr_pgp__psy_projects[@]}")
+						iarr_pgp__download_projects=("${iarr_psy_projects[@]}")
 					else
-						iarr_pgp__download_projects=("${project}")
+						iarr_pgp__download_projects=("${pgp__project}")
 					fi
+				}
+
+				{ #debug
+					! : && printf "\e[92m%s\n" \
+						$'\n' \
+						$'\e[2;92m[DEBUG]\e[0;92m '"${FUNCNAME[0]^}()" \
+						$'' \
+						"    pgp__path_core_default_directory:    \"${pgp__path_core_default_directory}\"" \
+						"    pgp__path_psy_projects_directory:    \"${pgp__path_psy_projects_directory}\"" \
+						"    pgp__path_ssh_key_file:              \"${pgp__path_ssh_key_file}\"" \
+						"    pgp__project:                        \"${pgp__project}\"" \
+						"    pgp__token:                          \"${pgp__token}\"" \
+						"    pgp__root_password:                  \"${pgp__root_password}\"" \
+						"    pgp__ssh_key:                        \"${pgp__ssh_key}\"" \
+						$'\e[96m\n' &&
+						declare -p iarr_pgp__download_projects && printf "\e[0m\n\n"
 				}
 			}
 
@@ -1282,45 +1356,99 @@ function psy_get_projects() {
 	{ #variables
 		declare -i \
 			all="${all:+0}" \
+			force="${force:+0}" \
 			git="${git:+0}" \
+			generate_dotenv="${generate_dotenv:+0}" \
 			install="${install:+0}" \
 			list="${list:+0}" \
-			generate_dotenv="${generate_dotenv:+0}" \
-			no_interactive="${no_interactive:+0}"
+			no_interactive="${no_interactive:+0}" \
+			ssh="${ssh:+0}"
 
 		declare \
 			directory="${directory:+}" \
+			ssh_key="${ssh_key:+}" \
 			project="${project:+}" \
 			root_password="${root_password:+}" \
-			token="${token:+}" \
-			arg_root_password="${arg_root_password:+}" \
-			arg_git_token="${arg_git_token:+}"
+			token="${token:+}"
+
+		declare -a iarr_psy_projects
+
+		declare -A \
+			aarr_psy_projects_alias \
+			aarr_psy_projects_owner
 	}
 
 	{ #setting-variables
 		config_parse_args "${@}"
 
-		{ # options
-			[[ -n "${directory}" ]] || directory="${HOME}/installations/psy-projects"
-
-			((git)) && ! type git &>/dev/null && throw_error "command \"git\" is required"
+		{ # COLUMNS LINES
+			declare -p COLUMNS LINES &>/dev/null || {
+				shopt -s checkwinsize && (: && :)
+				[[ -z "${COLUMNS:-}" ]] && COLUMNS=100
+				[[ -z "${LINES:-}" ]] && LINES=40
+			}
 		}
 
-		: || { # debug
-			printf "\e[92m%s\n" \
-				$'\n\n' \
+		{ #options
+			[[ -n "${directory}" ]] || directory="${HOME}/installations/psy-projects"
+
+			if ((git)); then
+				type git &>/dev/null || throw_error "Command \"git\" is required"
+			else
+				type curl &>/dev/null || throw_error "Command \"curl\" is required"
+			fi
+
+			((ssh)) && ! ((git)) && throw_error "Option \"--ssh\" requires \"-g | --git\""
+		}
+
+		{ # iarr_psy_projects aarr_psy_projects_{alias,owner}
+			iarr_psy_projects=(
+				"bash-core-library"
+				"psy-bash-tools"
+				"psy-dev-utilities"
+				"bootstrap-ved"
+				"virtual-env-docker"
+			)
+
+			aarr_psy_projects_alias=(
+				["bash-core-library"]="core"
+				["psy-bash-tools"]="tools"
+				["psy-dev-utilities"]="dev"
+				["bootstrap-ved"]="boot"
+				["virtual-env-docker"]="ved"
+			)
+
+			aarr_psy_projects_owner=(
+				["bash-core-library"]="psy-projects-bash"
+				["psy-bash-tools"]="psy-projects-bash"
+				["psy-dev-utilities"]="psy-projects-bash"
+				["bootstrap-ved"]="psy-projects-bash"
+				["virtual-env-docker"]="psy-projects-docker"
+			)
+		}
+
+		{ #debug
+			! : && printf "\e[92m%s\n" \
+				$'\n' \
 				$'\e[2;92m[DEBUG]\e[0;92m '"${FUNCNAME[0]^}()" \
 				$'' \
 				"    all:                  \"${all}\"" \
+				"    force:                \"${force}\"" \
 				"    git:                  \"${git}\"" \
+				"    generate_dotenv:      \"${generate_dotenv}\"" \
 				"    install:              \"${install}\"" \
 				"    list:                 \"${list}\"" \
 				"    no_interactive:       \"${no_interactive}\"" \
+				"    ssh:                  \"${ssh}\"" \
 				"    directory:            \"${directory}\"" \
+				"    ssh_key:              \"${ssh_key}\"" \
 				"    project:              \"${project}\"" \
 				"    root_password:        \"${root_password}\"" \
 				"    token:                \"${token}\"" \
-				$'\e[0m'
+				$'\e[96m\n' &&
+				declare -p iarr_psy_projects && printf "\n" &&
+				declare -p aarr_psy_projects_alias && printf "\n" &&
+				declare -p aarr_psy_projects_owner && printf "\e[0m\n\n"
 		}
 	}
 
@@ -1329,4 +1457,4 @@ function psy_get_projects() {
 	pgp__psy_get_projects
 }
 
-psy_get_projects "${@}"
+psy_get_projects "${@}" || throw_error "Failed to run \"psy_get_projects\""
