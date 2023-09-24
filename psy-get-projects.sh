@@ -17,12 +17,13 @@ function psy_get_projects() {
 				  -a, --all                <boolean?>      Enable download All projects.
 				  -f, --force              <boolean?>      Enable Force mode.
 				  -G, --generate-dotenv    <boolean?>      Enable Generate-Dotenv file.
-				  -g, --git                <boolean?>      Enable get Git repository instead of Tarball.
+				  -g, --git                <boolean?>      Enable Git mode.
 				  -i, --install            <boolean?>      Enable Install project in Path.
 				  -l, --list               <boolean?>      Enable List projects.
+				  -I, --interactive        <boolean?>      Enable Interactive mode.
 				  -n, --no-interactive     <boolean?>      Disable Interactive mode.
 				  -s, --ssh                <boolean?>      Enable SSH clone repository.
-				  -d, --directory          <string?>       Set Directory path value. (Default: "~/installations/psy-projects")
+				  -d, --directory          <string?>       Set Directory path value.
 				  -k, --ssh-key            <string?>       Set SSH-Key value.
 				  -p, --project            <string>        Set Project value.
 				  -r, --root-password      <string?>       Set Root-Password value.
@@ -38,6 +39,9 @@ function psy_get_projects() {
 
 				  get-psy-projects --all --git --ssh --install
 
+				$(printf "\e[1;4m%s\e[0m" "Notes:")
+				  - Default directory installation: "~/installations/psy-projects"
+
 			EOF
 
 			exit 0
@@ -46,7 +50,7 @@ function psy_get_projects() {
 		config_parse_args() {
 			: || ((${#})) || _help
 
-			while getopts ":-:hafgGilnsd:k:p:r:t:" opt; do
+			while getopts ":-:hafgGilInsd:k:p:r:t:" opt; do
 				case "${opt}" in
 				h) _help ;;
 				a) all="1" ;;
@@ -55,6 +59,7 @@ function psy_get_projects() {
 				G) generate_dotenv="1" ;;
 				i) install="1" ;;
 				l) list="1" ;;
+				I) interactive="1" ;;
 				n) no_interactive="1" ;;
 				s) ssh="1" ;;
 				d) directory="${OPTARG}" ;;
@@ -71,6 +76,7 @@ function psy_get_projects() {
 					generate-dotenv) generate_dotenv="1" ;;
 					install) install="1" ;;
 					list) list="1" ;;
+					interactive) interactive="1" ;;
 					no-interactive) no_interactive="1" ;;
 					ssh) ssh="1" ;;
 					directory) directory="${!OPTIND:?$'\n'"$(throw_error "Option \"--${OPTARG}\" requires an argument.")"}" && ((OPTIND++)) ;;
@@ -111,18 +117,42 @@ function psy_get_projects() {
 		pgp__psy_get_projects() {
 			{ #helpers
 				pgp__print_all_projects() {
-					printf "\e[1;48;5;39;38;5;15m %s \e[K\e[0m\n\n" "     List all Psy-Projects:       "
+					printf "\n\e[1;48;5;39;38;5;15m %s \e[K\e[0m\n\n" "     List all Psy-Projects:       "
 
 					for pgp__select_repo in "${iarr_psy_projects[@]}"; do
 						printf "\e[2;7;48;5;254;2;38;5;88m  %s  \e[0m  \e[1;48;5;233;38;5;226m  \"%s\"  \e[K\e[0m\n" \
 							"Owner:" "${aarr_psy_projects_owner[${pgp__select_repo}]}" \
 							"Repo: " "${pgp__select_repo}" \
-							"Alias:" "${aarr_psy_projects_alias[${pgp__select_repo}]}"
+							"Alias:" "${aarr_psy_projects_alias[${pgp__select_repo}]:-}"
 
 						printf "\n"
 					done
 
 					exit 0
+				}
+
+				pgp__check_core_lib_exists_or_download() {
+					[[ -f "${pgp__path_core_default_directory}/bash-core-library/bash-core-library.sh" ]] && return 0
+
+					(
+						all=0
+						list=0
+						install=0
+						generate_dotenv=0
+						no_interactive=1
+
+						pgp__disable_print_info=1
+
+						[[ -n "${token}" ]] && pgp__token="${token}" git=0 ssh=0
+
+						pgp__download_project \
+							--owner "psy-projects-bash" \
+							--repo "bash-core-library" \
+							--output "${pgp__path_core_default_directory}" ||
+							throw_error "Failed to download \"bash-core-library\""
+					)
+
+					return 0
 				}
 
 				pgp__download_project() {
@@ -173,6 +203,28 @@ function psy_get_projects() {
 					{ #utilities
 						dp__download_project() {
 							{ #helpers
+								dp__print_info() {
+									((pgp__disable_print_info)) && return 0
+
+									if ((git)); then
+										pgp__print_log_line -l "GET GIT" -r "${dp__repo//-/ }"
+									else
+										pgp__print_log_line -l "GET" -r "${dp__repo//-/ }"
+									fi
+
+									printf "           \e[2;96m%s \e[93m\"%s\"\e[0m\n" \
+										"Owner:     " "${dp__owner}" \
+										"Repo:      " "${dp__repo}" \
+										"Directory: " "${dp__path_download_project_directory}"
+
+									[[ -z "${pgp__token}" ]] && printf "\n\n" && return 0
+
+									printf "           \e[2;96m%s \e[93m\"%s\"\e[0m\n" \
+										"Token:     " "${pgp__token::8}****************"
+
+									printf "\n\n"
+								}
+
 								dp__get_tarball() {
 									{ #helpers
 										dp__http_request() {
@@ -199,14 +251,14 @@ function psy_get_projects() {
 												--file "${dp__path_tmp_tar_file}" ||
 												throw_error "Failed to extract tarball from \"${dp__path_tmp_tar_file}\" to \"${dp__path_output_directory}\""
 
-											printf "\e[93m%s  \e[96m\"%s\"\n" \
+											((pgp__disable_print_info)) || printf "\e[93m%s  \e[96m\"%s\"\n" \
 												$'\n'"Info:" "Tarball downloaded and extracted successfully from Github" \
 												"Path:" "${dp__path_download_project_directory}" \
 												"Url: " "github.com/${dp__owner}/${dp__repo}"
 
 											rm -fr "${dp__path_tmp_tar_directory}"
 
-											printf "\e[0m\n\n"
+											((pgp__disable_print_info)) || printf "\e[0m\n\n"
 										}
 									}
 
@@ -230,7 +282,7 @@ function psy_get_projects() {
 
 												printf "\e[0m\n\n"
 
-												throw_error "Failed get Tarball from Github"
+												return 1
 											fi
 										}
 									}
@@ -273,26 +325,6 @@ function psy_get_projects() {
 									printf "\e[0m"
 								}
 
-								dp__print_debug() {
-									if ((git)); then
-										pgp__print_log_line -l "GET GIT" -r "${dp__repo//-/ }"
-									else
-										pgp__print_log_line -l "GET" -r "${dp__repo//-/ }"
-									fi
-
-									printf "           \e[2;96m%s \e[93m\"%s\"\e[0m\n" \
-										"Owner:     " "${dp__owner}" \
-										"Repo:      " "${dp__repo}" \
-										"Directory: " "${dp__path_download_project_directory}"
-
-									[[ -z "${pgp__token}" ]] && printf "\n\n" && return 0
-
-									printf "           \e[2;96m%s \e[93m\"%s\"\e[0m\n" \
-										"Token:     " "${pgp__token::8}****************"
-
-									printf "\n\n"
-								}
-
 								dp__check_download_project_directory() {
 									if [[ -d "${dp__path_download_project_directory}" ]]; then
 										pgp__print_confirm \
@@ -310,6 +342,8 @@ function psy_get_projects() {
 								dp__list_content_download_project_directory() {
 									[[ -f "${dp__path_download_project_directory}/${dp__repo}.sh" ]] &&
 										chmod +x "${dp__path_download_project_directory}/${dp__repo}.sh"
+
+									((pgp__disable_print_info)) && return 0
 
 									du -hs "${dp__path_download_project_directory}" && printf "\e[0m\n"
 
@@ -349,8 +383,7 @@ function psy_get_projects() {
 
 							{ #utilities
 								dp__run_download_project() {
-									dp__print_debug
-
+									dp__print_info
 									dp__check_download_project_directory
 
 									if ((ssh || git)); then
@@ -420,32 +453,6 @@ function psy_get_projects() {
 					dp__download_project
 				}
 
-				pgp__check_core_lib_exists_or_download() {
-					[[ -f "${pgp__path_core_default_directory}/bash-core-library/bash-core-library.sh" ]] && return 0
-
-					(
-						all=0
-						list=0
-						install=0
-						generate_dotenv=0
-						no_interactive=1
-
-						if [[ -n "${token}" ]]; then
-							pgp__token="${token}"
-							git=0
-							ssh=0
-						fi
-
-						pgp__download_project \
-							--owner "psy-projects-bash" \
-							--repo "bash-core-library" \
-							--output "${pgp__path_core_default_directory}" >/dev/null ||
-							throw_error "Failed to download \"bash-core-library\""
-					) &
-
-					sleep 1
-				}
-
 				pgp__check_generate_dotenv_file() {
 					{ #helpers
 						pgp__generate_dotenv_file() {
@@ -501,7 +508,7 @@ function psy_get_projects() {
 				pgp__check_install_project() {
 					{ #helpers
 						pgp__install_project() {
-							[[ -n "${pgp__root_password}" ]] || set_pgp__root_password
+							[[ -n "${pgp__root_password}" ]] || install=1 set_pgp__root_password
 
 							printf "%s\n" "${pgp__root_password}" |
 								sudo -S \
@@ -1128,8 +1135,8 @@ function psy_get_projects() {
 				:
 
 				set_pgp__project() {
-					((all)) && return 0
-					((list)) && return 0
+					((interactive)) || return 0
+					((all || list)) && return 0
 
 					if [[ -n "${project}" ]]; then
 						pgp__project="${project}"
@@ -1154,8 +1161,7 @@ function psy_get_projects() {
 				}
 
 				set_pgp__token() {
-					((list)) && return 0
-					((ssh)) && return 0
+					((list || ssh)) && return 0
 
 					if [[ -n "${token}" ]]; then
 						pgp__token="${token}"
@@ -1178,8 +1184,8 @@ function psy_get_projects() {
 				}
 
 				set_pgp__root_password() {
+					((interactive || install)) || return 0
 					((list)) && return 0
-					((install)) || return 0
 
 					printf "" | sudo -S cat /etc/shadow &>/dev/null && return 0
 
@@ -1269,9 +1275,9 @@ function psy_get_projects() {
 				pgp__run_psy_get_projects() {
 					((list)) && pgp__print_all_projects
 
-					printf "\n\n"
-
 					pgp__check_core_lib_exists_or_download
+
+					printf "\n\n"
 
 					for pgp__select_repo in "${iarr_pgp__download_projects[@]}"; do
 						pgp__select_owner="${aarr_psy_projects_owner[${pgp__select_repo}]:?}"
@@ -1279,7 +1285,8 @@ function psy_get_projects() {
 						pgp__download_project \
 							--owner "${pgp__select_owner}" \
 							--repo "${pgp__select_repo}" \
-							--output "${pgp__path_psy_projects_directory}"
+							--output "${pgp__path_psy_projects_directory}" ||
+							throw_error "Failed to download project \"${pgp__select_repo}\""
 
 						pgp__check_generate_dotenv_file
 
@@ -1295,6 +1302,8 @@ function psy_get_projects() {
 			}
 
 			{ #variables
+				declare -i pgp__disable_print_info="${pgp__disable_print_info:+0}"
+
 				declare \
 					pgp__path_core_default_directory="${pgp__path_core_default_directory:+}" \
 					pgp__path_psy_projects_directory="${pgp__path_psy_projects_directory:+}" \
@@ -1326,7 +1335,7 @@ function psy_get_projects() {
 					if ((all)); then
 						iarr_pgp__download_projects=("${iarr_psy_projects[@]}")
 					else
-						iarr_pgp__download_projects=("${pgp__project}")
+						iarr_pgp__download_projects=("${pgp__project:-"psy"}")
 					fi
 				}
 
@@ -1361,6 +1370,7 @@ function psy_get_projects() {
 			generate_dotenv="${generate_dotenv:+0}" \
 			install="${install:+0}" \
 			list="${list:+0}" \
+			interactive="${interactive:+0}" \
 			no_interactive="${no_interactive:+0}" \
 			ssh="${ssh:+0}"
 
@@ -1403,6 +1413,7 @@ function psy_get_projects() {
 
 		{ # iarr_psy_projects aarr_psy_projects_{alias,owner}
 			iarr_psy_projects=(
+				"psy"
 				"bash-core-library"
 				"psy-bash-tools"
 				"psy-dev-utilities"
@@ -1419,6 +1430,7 @@ function psy_get_projects() {
 			)
 
 			aarr_psy_projects_owner=(
+				["psy"]="psy-projects-bash"
 				["bash-core-library"]="psy-projects-bash"
 				["psy-bash-tools"]="psy-projects-bash"
 				["psy-dev-utilities"]="psy-projects-bash"
@@ -1432,19 +1444,20 @@ function psy_get_projects() {
 				$'\n' \
 				$'\e[2;92m[DEBUG]\e[0;92m '"${FUNCNAME[0]^}()" \
 				$'' \
-				"    all:                  \"${all}\"" \
-				"    force:                \"${force}\"" \
-				"    git:                  \"${git}\"" \
-				"    generate_dotenv:      \"${generate_dotenv}\"" \
-				"    install:              \"${install}\"" \
-				"    list:                 \"${list}\"" \
-				"    no_interactive:       \"${no_interactive}\"" \
-				"    ssh:                  \"${ssh}\"" \
-				"    directory:            \"${directory}\"" \
-				"    ssh_key:              \"${ssh_key}\"" \
-				"    project:              \"${project}\"" \
-				"    root_password:        \"${root_password}\"" \
-				"    token:                \"${token}\"" \
+				"    all:                \"${all}\"" \
+				"    force:              \"${force}\"" \
+				"    git:                \"${git}\"" \
+				"    generate_dotenv:    \"${generate_dotenv}\"" \
+				"    install:            \"${install}\"" \
+				"    list:               \"${list}\"" \
+				"    interactive:        \"${interactive}\"" \
+				"    no_interactive:     \"${no_interactive}\"" \
+				"    ssh:                \"${ssh}\"" \
+				"    directory:          \"${directory}\"" \
+				"    ssh_key:            \"${ssh_key}\"" \
+				"    project:            \"${project}\"" \
+				"    root_password:      \"${root_password}\"" \
+				"    token:              \"${token}\"" \
 				$'\e[96m\n' &&
 				declare -p iarr_psy_projects && printf "\n" &&
 				declare -p aarr_psy_projects_alias && printf "\n" &&
