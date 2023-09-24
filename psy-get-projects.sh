@@ -1135,7 +1135,7 @@ function psy_get_projects() {
 				:
 
 				set_pgp__project() {
-					((interactive)) || return 0
+					[[ -n "${project}" ]] || ((interactive)) || return 0
 					((all || list)) && return 0
 
 					if [[ -n "${project}" ]]; then
@@ -1184,7 +1184,7 @@ function psy_get_projects() {
 				}
 
 				set_pgp__root_password() {
-					((interactive || install)) || return 0
+					[[ -n "${root_password}" ]] || ((interactive || install)) || return 0
 					((list)) && return 0
 
 					printf "" | sudo -S cat /etc/shadow &>/dev/null && return 0
@@ -1235,6 +1235,7 @@ function psy_get_projects() {
 								  HostName github.com
 								  User git
 								  IdentityFile ~/.ssh/psy_git
+								  StrictHostKeyChecking no
 
 							EOF
 						fi
@@ -1244,16 +1245,16 @@ function psy_get_projects() {
 						if [[ -n "${ssh_key}" ]]; then
 							pgp__ssh_key="${ssh_key}"
 						else
+							: $'\e[4;1;96m'"ed25519"$'\e[0;48;5;233;38;5;34m'
 							pgp__print_input \
 								--password \
-								--label "Please enter your "$'\e[4;1;96m'"ed25519"$'\e[0;48;5;233;38;5;34m'" SSH private key content." \
+								--label "Please enter your ${_} SSH private key content." \
 								--prompt "SSH Key" \
 								--placeholder "b3BlbnNzaC1rZXktdjEAAAAABG5..." \
 								--var-output "pgp__ssh_key"
 						fi
 
 						if [[ -n "${pgp__ssh_key}" ]]; then
-							# shellcheck disable=SC2001
 							pgp__ssh_key="$(sed -E "s|.{70}|&\n|g" <<<"${pgp__ssh_key}")"
 
 							printf "%s\n" \
@@ -1409,6 +1410,7 @@ function psy_get_projects() {
 			fi
 
 			((ssh)) && ! ((git)) && throw_error "Option \"--ssh\" requires \"-g | --git\""
+			((ssh)) && ! type ssh &>/dev/null && throw_error "Command \"ssh\" is required"
 		}
 
 		{ # iarr_psy_projects aarr_psy_projects_{alias,owner}
