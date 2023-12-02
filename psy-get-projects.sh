@@ -318,7 +318,10 @@ function psy_get_projects() {
 								dp__get_repo() {
 									printf "\e[2;96m"
 
-									git clone "${dp__url}" "${dp__path_download_project_directory}" 2>&1
+									GIT_SSH_COMMAND='ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null' \
+										git clone \
+										"${dp__url}" \
+										"${dp__path_download_project_directory}" 2>&1
 
 									dp__list_content_download_project_directory
 
@@ -348,7 +351,7 @@ function psy_get_projects() {
 									du -hs "${dp__path_download_project_directory}" && printf "\e[0m\n"
 
 									if type tree &>/dev/null; then
-										tree -hI ".git" --du --dirsfirst "${dp__path_download_project_directory}"
+										tree -hI ".GIT_SSH_COMMAND='ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null' " --du --dirsfirst "${dp__path_download_project_directory}"
 									else
 										ls -hasl --color "${dp__path_download_project_directory}"
 									fi
